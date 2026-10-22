@@ -1,4 +1,4 @@
-# 地道口语五步精学 · Agent English Lessons
+# 地道口语六步精学 · Agent English Lessons
 
 把你喜欢的油管视频，变成一节**可离线学习**的英语口语课。
 发给你的 AI Agent 一个视频链接，它就会帮你生成学习页面。
@@ -7,15 +7,16 @@
 
 ## 每节课是什么样的
 
-从一段 20–90 秒的母语者视频生成，分五步学：
+从一段 20–90 秒的母语者视频生成，分六步学：
 
 1. **对照中文，开口说英文**：看着中文说英文，高亮处标出要学的地道表达
 2. **对照英文，排查卡壳**：看原文和视频（字幕可切换为英文、中英或关闭）
 3. **精读表达**：每个表达都有音标、释义、用法、例句、同义和相关表达
 4. **单句跟读**：原声逐句播放、标准美音朗读、单句循环、录音对比、0.75x/1.25x 变速
 5. **口头填空**：关键表达挖空，口头说出后点击核对
+6. **小测验**：看中文、听发音，拼写出表达（Typing）或用闪卡自测（Flashcard），做完自动打卡
 
-另外还有课程目录（支持打卡）和一个跨课程的**表达库**：自动汇总所有学过的表达，并能看到每个表达在哪几课出现过。
+另外还有课程目录（支持打卡）和一个跨课程的**表达库**：自动汇总所有学过的表达，并能看到每个表达在哪几课出现过。收藏的表达可以在表达库里集中测验复习。
 
 生成的都是普通 HTML 文件和媒体文件，不需要网络、不需要服务器，双击就能打开，也可以拷到别的电脑上用。
 
@@ -92,9 +93,9 @@ Agent 会按 `AGENTS.md` 依次执行：`./lesson new` → 写 `lesson.json` →
 ## English
 
 **Agent English Lessons** turns a short native-speaker video into an offline,
-five-step spoken-English lesson page for Chinese learners: speak from the
+six-step spoken-English lesson page for Chinese learners: speak from the
 Chinese, compare with the original, study key expressions, shadow sentence by
-sentence (original audio, TTS, loop, record yourself), and an oral cloze test.
+sentence (original audio, TTS, loop, record yourself), an oral cloze test, and a listen-and-type quiz.
 
 Scripts handle the mechanical work (yt-dlp download, ffmpeg clip, Whisper
 transcription with word timestamps, edge-tts, static HTML). Your own AI agent

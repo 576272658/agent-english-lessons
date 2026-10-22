@@ -46,6 +46,7 @@ All timestamps are seconds **relative to the clip** (0 = start of `clip.mp4`).
     {
       "id": "get-ready-to",                   // lowercase-kebab-case, stable across lessons
       "phrase": "get ready to…",              // dictionary/base form
+      "answer": "get ready to",               // optional: what the learner types in the quiz (see below)
       "phonetic": "/ɡɛt ˈrɛdi tuː/",
       "pos": "phrase",                        // optional: phrase | phrasal verb | idiom | adj | noun | verb | adv | slang
       "meaning_zh": "准备做某事",
@@ -106,6 +107,14 @@ All timestamps are seconds **relative to the clip** (0 = start of `clip.mp4`).
   library links occurrences together.
 - `examples`: 1–2 new, everyday sentences (not copied from the video) with
   natural Chinese.
+- **Quiz answer.** Step 6 plays the expression's audio and the learner types
+  it, one box per word. ✔ The answer may contain only letters, digits,
+  spaces, apostrophes and hyphens. It defaults to `phrase` with `…` removed
+  (`get ready to…` → `get ready to`). Set `answer` explicitly when `phrase`
+  has placeholders or symbols: `phrase: "wear sth over one's ears"` →
+  `answer: "wear it over my ears"`; `phrase: "SPF (sun protection factor)"` →
+  `answer: "SPF"`. `meaning_zh` is the prompt, so keep it specific enough
+  that only this expression fits.
 
 ### Title and topic
 - `title`: Chinese, the pattern used by the course: name 2–3 of the key
@@ -123,6 +132,7 @@ All timestamps are seconds **relative to the clip** (0 = start of `clip.mp4`).
 | 3 精读表达 | `expressions[]` cards |
 | 4 单句跟读 | each sentence: original audio `start`→`end`, TTS of `en`, `ipa`, recording |
 | 5 口头填空 | `sentences[].en` with each `highlights[].en` blanked |
+| 6 小测验 | per expression: `meaning_zh` + `pos` as prompt, TTS of the answer, type the answer; flashcard mode shows `phrase`, `phonetic`, first example |
 
 ## Editing later
 

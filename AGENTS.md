@@ -1,6 +1,6 @@
 # AGENTS.md — instructions for AI agents
 
-This repo turns a short native-speaker video into an offline, five-step
+This repo turns a short native-speaker video into an offline, six-step
 English lesson page for Chinese learners. **You are the AI part of the
 pipeline**: scripts do download/transcribe/TTS/HTML; you write the lesson
 content. Any agent that can run shell commands and read/write files can do

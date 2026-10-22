@@ -113,9 +113,28 @@ def next_lesson_id() -> str:
     return f"EP{(max(nums) + 1 if nums else 1):03d}"
 
 
-def tts_name(sentence: dict) -> str:
-    digest = hashlib.sha1(f"{TTS_VOICE}|{sentence['en']}".encode()).hexdigest()[:8]
-    return f"s{sentence['id']}-{digest}.mp3"
+def tts_name(prefix: str, key, text: str) -> str:
+    digest = hashlib.sha1(f"{TTS_VOICE}|{text}".encode()).hexdigest()[:8]
+    return f"{prefix}{key}-{digest}.mp3"
+
+
+def tts_jobs(data: dict) -> dict[str, str]:
+    """filename -> text for every sentence and every expression's quiz answer."""
+    jobs = {tts_name("s", s["id"], s["en"]): s["en"] for s in data["sentences"]}
+    for e in data["expressions"]:
+        ans = quiz_answer(e)
+        jobs[tts_name("e-", e["id"], ans)] = ans
+    return jobs
+
+
+ANSWER_RE = re.compile(r"^[A-Za-z0-9'’\- ]+$")
+
+
+def quiz_answer(expr: dict) -> str:
+    """What the learner types in the quiz: `answer`, else `phrase` without ellipses."""
+    if expr.get("answer"):
+        return expr["answer"].strip()
+    return re.sub(r"\s+", " ", re.sub(r"…|\.\.\.", " ", expr.get("phrase", ""))).strip()
 
 
 def stage(path: Path) -> str:
@@ -313,6 +332,14 @@ def validate(out: Path) -> list[str]:
             expr_ids.add(eid)
         for key in ("phrase", "phonetic", "meaning_zh"):
             need(e, key, str, where)
+        if "answer" in e and (not isinstance(e["answer"], str) or not e["answer"].strip()):
+            errors.append(f"{where}: 'answer' must be a non-empty string when present")
+        elif isinstance(e.get("phrase"), str):
+            ans = quiz_answer(e)
+            if not ANSWER_RE.match(ans):
+                errors.append(f"{where}: quiz answer '{ans}' may contain only letters, digits, spaces, "
+                              f"apostrophes and hyphens -- set 'answer' to the text the learner should type "
+                              f"(e.g. phrase 'wear sth over one's ears' -> answer 'wear it over my ears')")
         ex = e.get("examples")
         if not isinstance(ex, list) or not ex:
             errors.append(f"{where}: 'examples' must be a non-empty list")
@@ -383,7 +410,7 @@ def make_tts(out: Path, data: dict) -> None:
 
     tts_dir = out / "tts"
     tts_dir.mkdir(exist_ok=True)
-    wanted = {tts_name(s): s["en"] for s in data["sentences"]}
+    wanted = tts_jobs(data)
     for old in tts_dir.glob("*.mp3"):
         if old.name not in wanted:
             old.unlink()
@@ -425,10 +452,13 @@ def build_lesson(out: Path, items: list[dict]) -> None:
     ids = [it["dir"].name for it in items]
     pos = ids.index(out.name)
     tts_dir = out / "tts"
-    sentences = []
-    for s in data["sentences"]:
-        name = tts_name(s)
-        sentences.append({**s, "tts": f"tts/{name}" if (tts_dir / name).exists() else None})
+
+    def tts_path(name: str) -> str | None:
+        return f"tts/{name}" if (tts_dir / name).exists() else None
+
+    sentences = [{**s, "tts": tts_path(tts_name("s", s["id"], s["en"]))} for s in data["sentences"]]
+    expressions = [{**e, "answer": quiz_answer(e), "tts": tts_path(tts_name("e-", e["id"], quiz_answer(e)))}
+                   for e in data["expressions"]]
     page = {
         "id": out.name,
         **{k: data[k] for k in ("title", "topic")},
@@ -437,7 +467,7 @@ def build_lesson(out: Path, items: list[dict]) -> None:
         "media": "clip.mp4" if source.get("has_video") else "audio.mp3",
         "has_video": source.get("has_video", False),
         "sentences": sentences,
-        "expressions": data["expressions"],
+        "expressions": expressions,
         "prev": ids[pos - 1] if pos > 0 else None,
         "next": ids[pos + 1] if pos + 1 < len(ids) else None,
     }
@@ -447,7 +477,8 @@ def build_lesson(out: Path, items: list[dict]) -> None:
 
 def build_site(items: list[dict]) -> None:
     ASSETS.mkdir(exist_ok=True)
-    shutil.copy(TEMPLATES / "style.css", ASSETS / "style.css")
+    for name in ("style.css", "quiz.js"):
+        shutil.copy(TEMPLATES / name, ASSETS / name)
 
     catalog = [{
         "id": it["dir"].name,
@@ -469,7 +500,10 @@ def build_site(items: list[dict]) -> None:
         lid = it["dir"].name
         sents = {s["id"]: s for s in it["lesson"]["sentences"]}
         for e in it["lesson"]["expressions"]:
-            entry = library.setdefault(e["id"], {**e, "occurrences": []})
+            entry = library.setdefault(e["id"], {**e, "answer": quiz_answer(e), "tts": None, "occurrences": []})
+            tts = it["dir"] / "tts" / tts_name("e-", e["id"], quiz_answer(e))
+            if entry["tts"] is None and tts.exists():
+                entry["tts"] = tts.relative_to(ROOT).as_posix()
             for s in sents.values():
                 if any(h.get("expr") == e["id"] for h in s.get("highlights", [])):
                     entry["occurrences"].append({"lesson": lid, "title": it["lesson"]["title"],
