@@ -94,7 +94,8 @@ def write_json(path: Path, data) -> None:
 def lesson_dirs() -> list[Path]:
     if not LESSONS.exists():
         return []
-    return sorted(p for p in LESSONS.iterdir() if p.is_dir() and re.fullmatch(r"EP\d{3,}", p.name))
+    dirs = [p for p in LESSONS.iterdir() if p.is_dir() and re.fullmatch(r"EP\d{3,}", p.name)]
+    return sorted(dirs, key=lambda p: int(p.name[2:]))  # numeric: EP999 < EP1000
 
 
 def resolve_lesson(lesson_id: str) -> Path:

@@ -86,7 +86,7 @@ it appears at the URL. The first `./lesson new` downloads the speech model
 
 ## 5. Report to the user
 
-Tell the user: the URL (bookmark it on phone and computer), that new lessons
+Tell the user: the URL (they can add it to the phone home screen as an app: Safari → Share → Add to Home Screen; Chrome → Install app), that new lessons
 appear after a refresh, and that progress (check-ins, favorites, quiz results)
 is saved on the server and shared across devices.
 

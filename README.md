@@ -59,6 +59,15 @@ tailscale serve --bg --https=8443 http://127.0.0.1:8765
 
 必须通过 **HTTPS** 访问，因为浏览器只在 HTTPS 下允许使用麦克风（跟读录音需要）。`tailscale serve` 会自动配置证书。Linux 部署见 DEPLOY.md。
 
+### 添加到手机桌面（PWA）
+
+部署好后可以像 App 一样添加到手机桌面，打开时全屏显示，没有浏览器地址栏：
+
+- **iPhone / iPad**：用 Safari 打开网址 → 点「分享」→「添加到主屏幕」
+- **Android**：用 Chrome 打开网址 → 点菜单 →「添加到主屏幕」或「安装应用」
+
+学习进度保存在服务器上，所以桌面图标、浏览器和电脑上看到的进度都是一样的。
+
 语音识别在 Apple 芯片上用 [mlx-whisper](https://github.com/ml-explore/mlx-examples)，其他平台用 [faster-whisper](https://github.com/SYSTRAN/faster-whisper)。模型约 1.5 GB，首次使用时自动下载。
 
 ## 日常使用

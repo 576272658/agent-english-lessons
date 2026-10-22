@@ -11,6 +11,7 @@ strip the prefix, set LESSON_BASE_PATH=/english.
 
 from __future__ import annotations
 
+import mimetypes
 import os
 import re
 import sys
@@ -27,6 +28,7 @@ import lesson as L
 import progress
 
 WEB = L.ROOT / "web"
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 LESSON_ID_RE = re.compile(r"^EP\d{3,}$")
 MEDIA_RE = re.compile(r"^(clip\.mp4|audio\.mp3|tts/[A-Za-z0-9_-]+\.mp3)$")
 EXPR_ID_RE = L.SLUG_RE

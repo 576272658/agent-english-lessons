@@ -86,6 +86,7 @@ tools/lesson.py           pipeline CLI
 tools/server.py           web app: serves web/, media, JSON API
 tools/progress.py         progress database (SQLite)
 web/                      the site: index, lesson, expressions, stats pages + app.js, quiz.js, style.css
+                          manifest.webmanifest + icons/ (PWA; icons/*.png are rendered from icons/*.svg)
 docs/lesson-format.md     lesson.json spec + authoring rules  ← read before writing
 docs/example-lesson.json  a complete valid example
 DEPLOY.md                 server setup for agents
