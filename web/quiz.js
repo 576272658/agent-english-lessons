@@ -11,6 +11,10 @@
 
   function mount(root, allItems, opts = {}) {
     const st = { mode: App.pref.get("quiz-mode", "typing"), items: allItems.slice(), i: 0, results: {}, tries: MAX_TRIES, revealed: false, flipped: false, finished: false };
+    // Focus the answer box only once the learner is using the quiz. Focusing on page load makes
+    // iOS Safari scroll to the quiz (bottom of the lesson page) and pop up the keyboard.
+    let engaged = !!opts.focus;
+    root.addEventListener("pointerdown", () => { engaged = true; });
     let advanceTimer = 0;
 
     function reset(items) {
@@ -91,7 +95,7 @@
 
       root.innerHTML = `${tabs}<div class="quiz-card"><div class="q-body">${head}${body}</div><div class="q-foot">${foot}</div></div>`;
       wire();
-      if (st.mode === "typing" && !st.revealed) root.querySelector(".q-in")?.focus({ preventScroll: true });
+      if (engaged && st.mode === "typing" && !st.revealed) root.querySelector(".q-in")?.focus({ preventScroll: true });
     }
 
     function check() {

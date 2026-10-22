@@ -120,7 +120,7 @@ function render(s, lib, words, settings) {
     const items = s.weak.map((w) => w.kind === "word"
       ? (wordById[w.id] && App.wordQuizItem(wordById[w.id])) : byId[w.id]).filter(Boolean);
     const box = document.getElementById("quizBox"); box.hidden = false;
-    Quiz.mount(box, items, { onFinish: () => App.toast("完成！刷新页面可看到最新统计") });
+    Quiz.mount(box, items, { onFinish: () => App.toast("完成！刷新页面可看到最新统计"), focus: true });
   };
 }
 

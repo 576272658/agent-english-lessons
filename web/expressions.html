@@ -64,7 +64,7 @@ function shell() {
   document.getElementById("review").onclick = () => {
     const items = (tab === "words" ? visibleWords().map(App.wordQuizItem) : visibleExpr()).slice().sort(() => Math.random() - 0.5);
     document.getElementById("quizCard").hidden = false;
-    Quiz.mount(document.getElementById("quiz"), items, { onFinish: refreshWords });
+    Quiz.mount(document.getElementById("quiz"), items, { onFinish: refreshWords, focus: true });
     document.getElementById("quizCard").scrollIntoView({ behavior: "smooth" });
   };
   document.getElementById("closeQuiz").onclick = () => { document.getElementById("quizCard").hidden = true; refreshWords(); };
