@@ -1,0 +1,17 @@
+[project]
+name = "agent-english-lessons"
+version = "0.1.0"
+description = "Turn short native-speaker videos into offline five-step English lessons, built by your AI agent"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "yt-dlp",
+    "edge-tts",
+    # Apple Silicon Macs use MLX (fast, GPU); everything else uses faster-whisper.
+    "mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "faster-whisper; sys_platform != 'darwin' or platform_machine != 'arm64'",
+]
+
+[tool.uv]
+package = false

@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "title": "去上健身课、一直很想做某事怎么说？",
+  "topic": "运动健身",
+  "sentences": [
+    {
+      "id": 1,
+      "en": "Hey guys, good morning and welcome back!",
+      "zh": "嗨大家好，早上好，欢迎回来！",
+      "ipa": "/heɪ ɡaɪz, ɡʊd ˈmɔrnɪŋ ən ˈwɛlkəm bæk/",
+      "start": 13.1,
+      "end": 16.3,
+      "highlights": [
+        { "en": "welcome back", "zh": "欢迎回来", "expr": "welcome-back" }
+      ]
+    },
+    {
+      "id": 2,
+      "en": "So this morning I am getting ready to go to a workout class, which I'm so excited for.",
+      "zh": "今天早上我正准备去上一节健身课，我超级期待。",
+      "ipa": "/soʊ ðɪs ˈmɔrnɪŋ aɪ æm ˈɡɛtɪŋ ˈrɛdi tə ɡoʊ tə ə ˈwɝkaʊt klæs, wɪtʃ aɪm soʊ ɪkˈsaɪtɪd fɔr/",
+      "start": 16.3,
+      "end": 21.98,
+      "highlights": [
+        { "en": "getting ready to", "zh": "正准备", "expr": "get-ready-to" },
+        { "en": "workout class", "zh": "健身课", "expr": "workout-class" },
+        { "en": "I'm so excited for", "zh": "超级期待", "expr": "be-excited-for" }
+      ]
+    },
+    {
+      "id": 3,
+      "en": "Because I've been wanting to do a workout class here, and this is going to be like my first one.",
+      "zh": "因为我一直很想在这边上一次健身课，这算是我的第一节吧。",
+      "ipa": "/bɪˈkəz aɪv bɪn ˈwɑntɪŋ tə du ə ˈwɝkaʊt klæs hɪr, ən ðɪs ɪz ˈɡoʊɪŋ tə bi laɪk maɪ fɝst wʌn/",
+      "start": 21.98,
+      "end": 27.0,
+      "highlights": [
+        { "en": "I've been wanting to", "zh": "一直很想", "expr": "have-been-wanting-to" },
+        { "en": "like", "zh": "算是", "expr": "like-filler" }
+      ]
+    },
+    {
+      "id": 4,
+      "en": "I don't know if I should wear it over my ears, you know?",
+      "zh": "我也不知道该不该把它戴在耳朵上面，你懂吧？",
+      "ipa": "/aɪ doʊnt noʊ ɪf aɪ ʃʊd wɛr ɪt ˈoʊvɚ maɪ ɪrz, jə noʊ/",
+      "start": 27.0,
+      "end": 29.3,
+      "highlights": [
+        { "en": "I don't know if I should", "zh": "不知道该不该", "expr": "i-dont-know-if-i-should" },
+        { "en": "you know", "zh": "你懂吧", "expr": "you-know" }
+      ]
+    }
+  ],
+  "expressions": [
+    {
+      "id": "welcome-back",
+      "phrase": "welcome back",
+      "phonetic": "/ˈwɛlkəm bæk/",
+      "pos": "phrase",
+      "meaning_zh": "欢迎回来",
+      "note": "油管博主开场的固定说法，意思是「欢迎回到我的频道」。完整版是 Welcome back to my channel.",
+      "examples": [
+        { "en": "Welcome back! How was your trip?", "zh": "欢迎回来！旅途怎么样？" }
+      ],
+      "related": [ { "phrase": "welcome back to my channel", "zh": "欢迎回到我的频道" } ],
+      "tags": ["greeting", "vlog"]
+    },
+    {
+      "id": "get-ready-to",
+      "phrase": "get ready to…",
+      "phonetic": "/ɡɛt ˈrɛdi tuː/",
+      "pos": "phrase",
+      "meaning_zh": "准备做某事；收拾准备去…",
+      "note": "口语里常用进行时 I'm getting ready to… 表示「正在收拾、准备出门去做…」，比 prepare to 自然得多。",
+      "examples": [
+        { "en": "I'm getting ready to leave for work.", "zh": "我正准备出门上班。" }
+      ],
+      "synonyms": [ { "phrase": "be about to…", "zh": "马上就要…" } ],
+      "related": [ { "phrase": "get ready for…", "zh": "为…做准备（接名词）" } ],
+      "tags": ["daily routine"]
+    },
+    {
+      "id": "workout-class",
+      "phrase": "workout class",
+      "phonetic": "/ˈwɝkaʊt klæs/",
+      "pos": "noun",
+      "meaning_zh": "健身课（团课）",
+      "note": "健身房里跟着教练一起上的课。work out 是动词「锻炼」，workout 是名词。",
+      "examples": [
+        { "en": "I signed up for a morning workout class.", "zh": "我报了一个早上的健身课。" }
+      ],
+      "related": [
+        { "phrase": "work out", "zh": "锻炼、健身" },
+        { "phrase": "spin class", "zh": "动感单车课" }
+      ],
+      "tags": ["fitness"]
+    },
+    {
+      "id": "be-excited-for",
+      "phrase": "be excited for…",
+      "phonetic": "/bi ɪkˈsaɪtɪd fɔr/",
+      "pos": "phrase",
+      "meaning_zh": "对…很期待、很兴奋",
+      "note": "excited for + 名词 / excited to + 动词。口语里常加 so：I'm so excited for…",
+      "examples": [
+        { "en": "I'm so excited for the weekend!", "zh": "我超期待周末！" }
+      ],
+      "synonyms": [ { "phrase": "look forward to…", "zh": "期待…" } ],
+      "related": [ { "phrase": "can't wait to…", "zh": "迫不及待要…" } ],
+      "tags": ["feelings"]
+    },
+    {
+      "id": "have-been-wanting-to",
+      "phrase": "have been wanting to…",
+      "phonetic": "/hæv bɪn ˈwɑntɪŋ tuː/",
+      "pos": "phrase",
+      "meaning_zh": "一直很想做某事（想了很久）",
+      "note": "现在完成进行时，强调这个愿望持续了一段时间、现在终于要实现了。比 I wanted to 更有「想了好久」的感觉。",
+      "examples": [
+        { "en": "I've been wanting to try this restaurant for months.", "zh": "这家餐厅我想去吃好几个月了。" }
+      ],
+      "synonyms": [ { "phrase": "have always wanted to…", "zh": "一直都想…" } ],
+      "tags": ["grammar", "informal"]
+    },
+    {
+      "id": "like-filler",
+      "phrase": "like",
+      "phonetic": "/laɪk/",
+      "pos": "filler",
+      "meaning_zh": "口头禅：「就是、算是、大概」",
+      "note": "美国年轻人说话时的填充词，放在想说的内容前面，让语气更随意、不那么绝对。听懂就好，不必刻意多用。",
+      "examples": [
+        { "en": "It was like the best day ever.", "zh": "那简直是有史以来最棒的一天。" }
+      ],
+      "related": [ { "phrase": "kind of", "zh": "有点儿" } ],
+      "tags": ["filler", "informal"]
+    },
+    {
+      "id": "i-dont-know-if-i-should",
+      "phrase": "I don't know if I should…",
+      "phonetic": "/aɪ doʊnt noʊ ɪf aɪ ʃʊd/",
+      "pos": "phrase",
+      "meaning_zh": "我拿不准要不要…",
+      "note": "犹豫、自言自语时很常用，比 I'm not sure whether I should… 更口语。",
+      "examples": [
+        { "en": "I don't know if I should text him back.", "zh": "我拿不准要不要回他消息。" }
+      ],
+      "synonyms": [ { "phrase": "I'm not sure if I should…", "zh": "我不确定要不要…" } ],
+      "tags": ["daily talk"]
+    },
+    {
+      "id": "you-know",
+      "phrase": "you know",
+      "phonetic": "/jə noʊ/",
+      "pos": "filler",
+      "meaning_zh": "你懂的、你知道吧",
+      "note": "放在句末寻求认同，或在句中停顿思考时用。弱读成 /jə noʊ/，听起来像 ya know。",
+      "examples": [
+        { "en": "It's just hard to wake up early, you know?", "zh": "早起就是很难嘛，你懂吧？" }
+      ],
+      "related": [ { "phrase": "I mean", "zh": "我的意思是" } ],
+      "tags": ["filler", "informal"]
+    }
+  ]
+}

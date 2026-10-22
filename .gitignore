@@ -1,0 +1,13 @@
+# user content: downloaded media and generated lessons
+/lessons/
+/index.html
+/expressions.html
+/expressions.json
+/assets/
+
+# python / uv
+.venv/
+__pycache__/
+*.pyc
+
+.DS_Store
