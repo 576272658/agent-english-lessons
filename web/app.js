@@ -92,5 +92,14 @@
     examples: w.context_en ? [{ en: w.context_en, zh: w.context_zh || "" }] : [],
   });
 
-  window.App = { esc, api, progress, nav, play, speak, toast, fail, pref, wordQuizItem };
+  // Difficulty badges: fit for this learner (text + color), vocabulary level, speed
+  function difficultyBadges(d, { long = false } = {}) {
+    if (!d) return "";
+    const fitIcon = { easy: "○", good: "✓", hard: "△", too_hard: "✕" }[d.fit] || "";
+    const sp = d.speed ? `<span class="dchip">语速${esc(d.speed.speed_name)}${long ? `（${d.speed.wpm} 词/分）` : ""}</span>` : "";
+    return `<span class="fit fit-${esc(d.fit)}" title="你大约认识其中 ${Math.round(d.coverage * 100)}% 的词">${fitIcon} ${long ? "对你" : ""}${esc(d.fit_name)}</span>`
+      + `<span class="dchip">词汇·${esc(d.vocab_level_name)}</span>${sp}`;
+  }
+
+  window.App = { esc, api, progress, nav, play, speak, toast, fail, pref, wordQuizItem, difficultyBadges };
 })();

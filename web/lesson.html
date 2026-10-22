@@ -79,6 +79,27 @@ function exprCard(e) {
     </dl></div>`;
 }
 
+// Step 0: words in this clip that are likely new for this learner (not the lesson's expressions)
+function prestudy() {
+  const words = L.prestudy || [];
+  const d = L.difficulty;
+  if (!words.length) return "";
+  const warn = d && d.fit === "too_hard"
+    ? `<div class="warn">这一段对你来说偏难（大约认识 ${Math.round(d.coverage * 100)}% 的词）。建议先把下面的生词过一遍、听几遍发音，再开始第 1 步；也可以让 Agent 换一段更简单的片段。</div>`
+    : d && d.fit === "hard" ? `<div class="warn soft">这一段有一点挑战。先花两分钟预习下面的生词，第 1 步会顺很多。</div>` : "";
+  return `<section class="card" id="prestudy"><h2><span class="step-no pre">0</span>课前预习：先认识这些词</h2>
+    ${warn}
+    <p class="tip">本段里可能超出你当前水平的词（本课重点表达不在这里，第 3 步会专门讲）。点 🔊 听发音，不熟的加入生词本。</p>
+    <div class="pre-list">${words.map((w) => `<div class="pre-w" data-key="${esc(w.book_key)}">
+        <div><b>${esc(w.surface)}</b>${w.surface.toLowerCase() !== w.word.toLowerCase() ? ` <span class="muted">← ${esc(w.word)}</span>` : ""}
+          <span class="ipa">${esc(w.phonetic)}</span></div>
+        <div class="pre-m">${esc(w.meaning)}</div>
+        <div class="btn-row"><button class="btn" data-pre-say="${esc(w.surface)}" data-src="${esc(w.audio)}">🔊</button>
+          <button class="btn ${progress.hasWord(w.book_key) ? "on" : ""}" data-pre-add="${esc(w.book_key)}">${progress.hasWord(w.book_key) ? "✓ 生词本" : "＋ 生词本"}</button></div>
+      </div>`).join("")}</div>
+  </section>`;
+}
+
 function render() {
   document.title = `${L.id} ${L.title}`;
   const src = L.source || {};
@@ -89,11 +110,14 @@ function render() {
   <div class="meta"><span>${esc(L.id)}</span><span>主题：${esc(L.topic)}</span>${src.channel ? `<span>博主：${esc(src.channel)}</span>` : ""}
     ${src.url ? `<span><a href="${esc(src.url)}" target="_blank" rel="noopener">原视频</a></span>` : ""}${src.created ? `<span>${esc(src.created)}</span>` : ""}</div>
   <h1>${esc(L.title)}</h1>
+  ${L.difficulty ? `<div class="dline" style="margin-bottom:12px">${App.difficultyBadges(L.difficulty, { long: true })}</div>` : ""}
   <div class="btn-row no-print">
     <button class="btn ${done ? "on" : ""}" id="doneBtn">${done ? "✓ 已打卡" : "打卡"}</button>
     <button class="btn" onclick="window.print()">打印 / 存为 PDF</button>
   </div>
   ${L.notes ? `<p class="tip">${esc(L.notes)}</p>` : ""}
+
+  ${prestudy()}
 
   <section class="card"><h2><span class="step-no">1</span>对照中文，尝试开口说英文</h2>
     <p class="tip">看着中文，用英文把整段说出来。高亮处是本课要学的地道表达，可以先隐藏提示挑战一下。</p>
@@ -158,6 +182,19 @@ function wire() {
     [$("#doneBtn"), $("#doneBtn2")].forEach((b) => { b.classList.toggle("on", done); b.textContent = done ? "✓ 已打卡" : "打卡"; });
   };
   $("#doneBtn").onclick = $("#doneBtn2").onclick = () => setDone(!progress.isDone(L.id));
+
+  // step 0 pre-study
+  $$("[data-pre-say]").forEach((b) => b.onclick = () => App.play(b.dataset.src, b.dataset.preSay, rate));
+  $$("[data-pre-add]").forEach((b) => b.onclick = async () => {
+    const key = b.dataset.preAdd, row = b.closest(".pre-w");
+    const w = L.prestudy.find((x) => x.book_key === key);
+    const ctx = L.sentences.find((s) => s.en.toLowerCase().includes(w.surface.toLowerCase()));
+    b.disabled = true;
+    if (progress.hasWord(key)) await progress.removeWord(key);
+    else await progress.addWord(key, { lesson: L.id, context_en: ctx?.en, context_zh: ctx?.zh });
+    b.disabled = false; b.classList.toggle("on", progress.hasWord(key));
+    b.textContent = progress.hasWord(key) ? "✓ 生词本" : "＋ 生词本";
+  });
 
   // step 6 quiz
   Quiz.mount($("#quiz"), L.expressions, { onFinish: () => setDone(true) });

@@ -54,7 +54,14 @@ function calendar(days) {
   </div>`;
 }
 
-function render(s, lib, words) {
+function levelPicker(settings) {
+  return `<section class="card" id="level"><h2>你的水平</h2>
+    <p class="tip">课程的难度标签（轻松 / 合适 / 有挑战 / 太难）和课前预习的生词，都按这个水平计算。生词本里测验答对的词也会算作"认识"。拿不准就先选低一档。</p>
+    <div class="level-row">${settings.levels.map((lv) => `<button class="chip ${lv.id === settings.level ? "on" : ""}" data-level="${lv.id}">${esc(lv.name)}</button>`).join("")}</div>
+  </section>`;
+}
+
+function render(s, lib, words, settings) {
   const t = s.totals;
   const tiles = [
     ["学习天数", t.study_days, "天"],
@@ -69,6 +76,7 @@ function render(s, lib, words) {
     <h1>学习统计</h1>
     <div class="tiles">${tiles.map(([label, v, unit]) => `<div class="tile"><div class="tile-l">${label}</div>
       <div class="tile-v">${esc(v)}<span>${esc(unit)}</span></div></div>`).join("")}</div>
+    ${levelPicker(settings)}
     <p class="tip">「掌握」= 最近一次测验答对。生词在「表达库 → 生词本」里测验。学习次数 = 测验答题数 + 打卡数。共答题 ${t.quiz_attempts} 次。</p>
 
     <section class="card"><h2>最近 16 周</h2>${calendar(s.calendar)}</section>
@@ -92,6 +100,14 @@ function render(s, lib, words) {
       : `<div class="empty">还没有打卡记录</div>`}
     </section>`;
 
+  document.querySelectorAll("[data-level]").forEach((b) => b.onclick = async () => {
+    try {
+      const r = await App.api("api/settings", { method: "PUT", body: { level: b.dataset.level } });
+      document.querySelectorAll("[data-level]").forEach((x) => x.classList.toggle("on", x.dataset.level === r.level));
+      App.toast(`已设为「${b.textContent}」，课程难度已按新水平重新计算`);
+    } catch (e) { App.toast("保存失败，请检查网络"); }
+  });
+  if (location.hash === "#level") document.getElementById("level").scrollIntoView();
   const tip = document.getElementById("calTip");
   document.querySelectorAll(".cal .cell[data-tip]").forEach((c) => {
     const show = () => { tip.textContent = c.dataset.tip; document.querySelectorAll(".cell.sel").forEach((x) => x.classList.remove("sel")); c.classList.add("sel"); };
@@ -108,8 +124,8 @@ function render(s, lib, words) {
   };
 }
 
-Promise.all([App.api("api/stats"), App.api("api/expressions"), App.api("api/words"), App.progress.load()])
-  .then(([s, lib, words]) => render(s, lib, words))
+Promise.all([App.api("api/stats"), App.api("api/expressions"), App.api("api/words"), App.api("api/settings"), App.progress.load()])
+  .then(([s, lib, words, settings]) => render(s, lib, words, settings))
   .catch((e) => App.fail(document.getElementById("app"), e));
 </script>
 </body>

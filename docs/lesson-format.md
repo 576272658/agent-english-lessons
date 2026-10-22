@@ -94,7 +94,13 @@ All timestamps are seconds **relative to the clip** (0 = start of `clip.mp4`).
 - Highlights in one sentence must not overlap.
 
 ### Expressions — what to pick
-- 5–12 per lesson. Pick what a Chinese intermediate learner would **not**
+- Match the learner (`./lesson level`). For 初中/高中 learners pick **5–8**
+  high-value, everyday expressions, keep `note` short and concrete, and keep
+  examples simple (no words harder than the clip itself). For higher levels,
+  up to 12.
+- Words the learner doesn't know but that aren't worth an expression card are
+  fine to leave: the page lists them automatically in the pre-study step.
+- Otherwise 5–12 per lesson. Pick what a Chinese intermediate learner would **not**
   naturally say but a native speaker does: collocations, phrasal verbs,
   idioms, natural fillers/discourse markers, vivid adjectives, everyday
   nouns for daily-life objects. *pretty sunny out*, *dreary*,
@@ -127,6 +133,7 @@ All timestamps are seconds **relative to the clip** (0 = start of `clip.mp4`).
 
 | Page step | Uses |
 |---|---|
+| 0 课前预习 | automatic: words in `sentences[].en` above the learner's level that are not inside a highlight |
 | 1 对照中文开口说 | `sentences[].zh` with `highlights[].zh` marked and `highlights[].en` shown as hints |
 | 2 对照英文找卡壳 | `sentences[].en` with `highlights[].en` marked, `highlights[].zh` as gloss; video with captions timed by `start`/`end` |
 | 3 精读表达 | `expressions[]` cards |

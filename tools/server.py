@@ -25,6 +25,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 import dictionary
+import difficulty
 import lesson as L
 import progress
 
@@ -64,9 +65,36 @@ def published() -> dict[str, dict]:
     return out
 
 
+_diff_cache: dict[tuple, dict] = {}
+
+
+def difficulties(lessons: dict[str, dict]) -> dict[str, dict]:
+    """Per-lesson difficulty for the current learner (level + mastered words), cached."""
+    if not dictionary.installed():
+        return {}
+    level, known = L.learner()
+    known_key = hash(frozenset(known))
+    out = {}
+    for lid, p in lessons.items():
+        key = (lid, _cache[lid][0], level, known_key)
+        if key not in _diff_cache:
+            _diff_cache[key] = L.lesson_difficulty(p["sentences"], level, known)
+        out[lid] = _diff_cache[key]
+    return out
+
+
+def summary(d: dict | None) -> dict | None:
+    if not d:
+        return None
+    return {k: d[k] for k in ("fit", "fit_name", "coverage", "vocab_level", "vocab_level_name", "level_name")} | {
+        "speed": d["speed"], "n_unknown": len(d["unknown"])}
+
+
 # ---------- lessons ----------
 
 async def list_lessons(request: Request):
+    lessons = published()
+    diffs = difficulties(lessons)
     return JSONResponse([{
         "id": lid,
         "title": p["title"],
@@ -76,7 +104,8 @@ async def list_lessons(request: Request):
         "duration": p["source"].get("duration"),
         "n_sentences": len(p["sentences"]),
         "n_expressions": len(p["expressions"]),
-    } for lid, p in published().items()])
+        "difficulty": summary(diffs.get(lid)),
+    } for lid, p in lessons.items()])
 
 
 async def get_lesson(request: Request):
@@ -86,7 +115,11 @@ async def get_lesson(request: Request):
         raise HTTPException(404, "lesson not found")
     ids = list(lessons)
     pos = ids.index(lid)
+    d = difficulties({lid: lessons[lid]}).get(lid)
     return JSONResponse({**lessons[lid],
+                         "difficulty": summary(d),
+                         "prestudy": [{**u, "audio": f"api/word-audio/{u['surface'].lower()}"} for u in d["unknown"]]
+                         if d else [],
                          "prev": ids[pos - 1] if pos > 0 else None,
                          "next": ids[pos + 1] if pos + 1 < len(ids) else None})
 
@@ -225,6 +258,22 @@ async def stats(request: Request):
     return JSONResponse(progress.stats(published(), days=days))
 
 
+async def get_settings(request: Request):
+    return JSONResponse({"level": L.learner()[0],
+                         "levels": [{"id": lv["id"], "name": lv["name"]} for lv in difficulty.LEVELS]})
+
+
+async def put_settings(request: Request):
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "expected JSON")
+    if body.get("level") not in difficulty.LEVEL_IDS:
+        raise HTTPException(400, f"level must be one of {difficulty.LEVEL_IDS}")
+    progress.set_setting("level", body["level"])
+    return await get_settings(request)
+
+
 async def health(request: Request):
     return JSONResponse({"ok": True, "lessons": len(published()), "dictionary": dictionary.installed()})
 
@@ -271,6 +320,8 @@ routes = [
     Route("/api/words", list_words),
     Route("/api/words/{word}", word_book, methods=["PUT", "DELETE"]),
     Route("/api/stats", stats),
+    Route("/api/settings", get_settings),
+    Route("/api/settings", put_settings, methods=["PUT"]),
     Route("/media/{lesson_id}/{path:path}", media),
     Mount("/", app=NoCacheUI(StaticFiles(directory=WEB, html=True))),
 ]

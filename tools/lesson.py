@@ -176,6 +176,7 @@ def cmd_new(args) -> None:
               f"consider re-running with --start/--end.")
 
     transcribe(out, args.model)
+    print_difficulty(out)
     print_next_steps(out)
 
 
@@ -275,6 +276,82 @@ def transcribe(out: Path, model: str) -> None:
 def cmd_transcribe(args) -> None:
     out = resolve_lesson(args.lesson)
     transcribe(out, args.model)
+
+
+# ---------- difficulty ----------
+
+def learner() -> tuple[str, set[str]]:
+    """The learner's level and the word-book words they have mastered."""
+    import difficulty
+    import progress
+
+    level = progress.get_setting("level", difficulty.DEFAULT_LEVEL)
+    return level, progress.mastered_words()
+
+
+def lesson_difficulty(sentences: list[dict], level: str, known: set[str]) -> dict:
+    """sentences: lesson.json sentences (en, start, end, highlights). Words inside highlights are
+    taught as expressions, so they are left out of the pre-study list."""
+    import difficulty
+
+    skip = {t.lower() for s in sentences for h in s.get("highlights", [])
+            for t in difficulty.TOKEN_RE.findall(h.get("en", ""))}
+    result = difficulty.analyze([s["en"] for s in sentences], level, known, skip)
+    seconds = sum(max(0.0, s["end"] - s["start"]) for s in sentences)
+    result["speed"] = difficulty.speed(sum(difficulty.word_count(s["en"]) for s in sentences), seconds)
+    return result
+
+
+def print_difficulty(out: Path) -> None:
+    """Difficulty of the raw transcript, so the agent can warn before writing lesson.json."""
+    import dictionary
+
+    if not dictionary.installed():
+        print("(difficulty check skipped: dictionary not installed -- ./lesson dict install)")
+        return
+    segs = read_json(out / "transcript.json")["segments"]
+    level, known = learner()
+    d = lesson_difficulty([{"en": s["text"], "start": s["start"], "end": s["end"]} for s in segs], level, known)
+    sp = d["speed"]
+    print(f"\nDIFFICULTY for this learner (level: {d['level_name']}): {d['fit_name']} ({d['fit']}) -- "
+          f"knows ~{d['coverage']:.0%} of words; vocabulary level {d['vocab_level_name']}; "
+          f"speed {sp['wpm'] if sp else '?'} wpm ({sp['speed_name'] if sp else '?'})")
+    if d["unknown"]:
+        print("  likely unknown: " + ", ".join(f"{u['surface']} ({u['meaning'][:12]})" for u in d["unknown"][:15]))
+    if d["fit"] == "too_hard":
+        print("  TOO HARD: tell the user before writing lesson.json. Offer: a shorter clip, an easier "
+              "section (./lesson scan <url>), or continue anyway (the page adds a pre-study word list).")
+    elif d["fit"] == "hard":
+        print("  Challenging but workable: mention it to the user; the page adds a pre-study word list.")
+
+
+def cmd_level(args) -> None:
+    import difficulty
+    import progress
+
+    names = {lv["id"]: lv["name"] for lv in difficulty.LEVELS}
+    if args.level:
+        if args.level not in names:
+            die(f"level must be one of: {', '.join(f'{k} ({v})' for k, v in names.items())}")
+        progress.set_setting("level", args.level)
+    level = progress.get_setting("level", difficulty.DEFAULT_LEVEL)
+    print(f"learner level: {level} ({names[level]})  -- options: "
+          + ", ".join(f"{k}={v}" for k, v in names.items()))
+
+
+def cmd_check(args) -> None:
+    out = resolve_lesson(args.lesson)
+    if (out / "lesson.json").exists() and not validate(out):
+        level, known = learner()
+        d = lesson_difficulty(read_json(out / "lesson.json")["sentences"], level, known)
+        print(json.dumps({k: v for k, v in d.items()}, ensure_ascii=False, indent=2) if args.json else
+              f"[{out.name}] {d['fit_name']} for {d['level_name']} (knows {d['coverage']:.0%}), "
+              f"vocab {d['vocab_level_name']}, speed {d['speed']['wpm'] if d['speed'] else '?'} wpm; "
+              f"pre-study words: {', '.join(u['surface'] for u in d['unknown']) or 'none'}")
+    elif (out / "transcript.json").exists():
+        print_difficulty(out)
+    else:
+        die("no transcript yet")
 
 
 def print_next_steps(out: Path) -> None:
@@ -672,6 +749,23 @@ def main() -> None:
     ex = sub.add_parser("expressions", help="list existing expression ids (reuse them in new lessons)")
     ex.add_argument("--json", action="store_true")
     ex.set_defaults(func=cmd_expressions)
+
+    sc = sub.add_parser("scan", help="find the clips of a long video that best fit the learner's level")
+    sc.add_argument("source", help="YouTube (or any yt-dlp) URL")
+    sc.add_argument("--length", type=float, default=45, help="target clip length in seconds (default 45)")
+    sc.add_argument("--top", type=int, default=3)
+    sc.add_argument("--json", action="store_true")
+    sc.add_argument("--model", default=WHISPER_MODEL)
+    sc.set_defaults(func=lambda a: __import__("scan").cmd_scan(a))
+
+    lv = sub.add_parser("level", help="show or set the learner's level (drives difficulty labels)")
+    lv.add_argument("level", nargs="?", help="zk | gk | cet4 | cet6 | ielts")
+    lv.set_defaults(func=cmd_level)
+
+    ck = sub.add_parser("check", help="difficulty of a lesson for this learner")
+    ck.add_argument("lesson")
+    ck.add_argument("--json", action="store_true")
+    ck.set_defaults(func=cmd_check)
 
     dc = sub.add_parser("dict", help="click-to-look-up dictionary (ECDICT): install once, or look up a word")
     dc.add_argument("action", choices=["install", "lookup"])

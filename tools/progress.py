@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
     mode        TEXT NOT NULL,           -- typing | flash
     wrong_tries INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,              -- e.g. "level"
+    value TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS quiz_attempts_expr ON quiz_attempts (kind, expr_id);
 CREATE INDEX IF NOT EXISTS quiz_attempts_day ON quiz_attempts (day);
 """
@@ -125,6 +129,28 @@ def words() -> list[dict]:
                      ORDER BY id DESC LIMIT 1) AS last_result
             FROM wordbook w ORDER BY at DESC""").fetchall()
     return [dict(r) for r in rows]
+
+
+def get_setting(key: str, default: str | None = None) -> str | None:
+    with db() as c:
+        row = c.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(key: str, value: str) -> None:
+    with db() as c:
+        c.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
+                  "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+
+def mastered_words() -> set[str]:
+    """Word-book words whose latest quiz answer was right -- counted as known in difficulty checks."""
+    with db() as c:
+        rows = c.execute("""
+            SELECT w.word FROM wordbook w
+            WHERE (SELECT result FROM quiz_attempts q WHERE q.kind = 'word' AND q.expr_id = w.word
+                   ORDER BY id DESC LIMIT 1) = 'known'""").fetchall()
+    return {r["word"] for r in rows}
 
 
 # ---------- reads ----------
