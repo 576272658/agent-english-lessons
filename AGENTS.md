@@ -48,7 +48,8 @@ video/audio file, optionally with a time range ("从 1:20 到 2:00").
 | `./lesson finish EPxxx` | Validate → TTS → publish to the site |
 | `./lesson status` | List lessons and their stage |
 | `./lesson expressions [--json]` | Existing expression ids across lessons |
-| `./lesson progress [--json]` | Learner's stats and most-missed expressions |
+| `./lesson progress [--json]` | Learner's stats, most-missed expressions and word-book words |
+| `./lesson dict install` / `./lesson dict lookup <word>` | Click-to-look-up dictionary (ECDICT): install once / test a lookup |
 | `./lesson transcribe EPxxx` | Re-run speech recognition |
 | `./lesson serve --port N` | Run the site in the foreground (dev) |
 | `./lesson service install\|restart\|status\|uninstall` | Run the site permanently (macOS launchd), see DEPLOY.md |
@@ -69,7 +70,8 @@ video/audio file, optionally with a time range ("从 1:20 到 2:00").
 - **"改一下第 3 课 / 这个翻译不对 / 多加几个表达"**: edit
   `lessons/EPxxx/lesson.json`, run `./lesson finish EPxxx`.
 - **"我最近哪些表达老是错 / 帮我复习"**: run `./lesson progress`. Summarize the
-  weak expressions; the user can quiz them on the site's 学习统计 page. When
+  weak expressions and words; the user can quiz them on the site's 学习统计 page.
+  The user's word book (words they clicked and saved) is in the same report. When
   making new lessons, prefer clips that reuse weak expressions, and highlight
   them again (same `id`) — that feeds the same quiz history.
 - **Delete a lesson**: confirm with the user first, then remove its folder.
@@ -85,6 +87,7 @@ lesson                    entry point (wraps `uv run tools/lesson.py`)
 tools/lesson.py           pipeline CLI
 tools/server.py           web app: serves web/, media, JSON API
 tools/progress.py         progress database (SQLite)
+tools/dictionary.py       click-to-look-up dictionary built from ECDICT into data/dict.db
 web/                      the site: index, lesson, expressions, stats pages + app.js, quiz.js, style.css
                           manifest.webmanifest + icons/ (PWA; icons/*.png are rendered from icons/*.svg)
 docs/lesson-format.md     lesson.json spec + authoring rules  ← read before writing
@@ -97,7 +100,8 @@ lessons/EPxxx/            per lesson (git-ignored):
   lesson.json             lesson content                               (YOU)
   tts/*.mp3               sentence + expression speech                  (script)
   ready.json              published marker                              (script)
-data/                     git-ignored: progress.db (check-ins, favorites, quiz attempts), server.log
+data/                     git-ignored: progress.db (check-ins, favorites, word book, quiz attempts),
+                          dict.db (dictionary), word-audio/ (cached word TTS), server.log
 ```
 
 ## Rules

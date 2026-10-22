@@ -24,6 +24,7 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
+import dictionary
 import lesson as L
 import progress
 
@@ -32,6 +33,7 @@ mimetypes.add_type("application/manifest+json", ".webmanifest")
 LESSON_ID_RE = re.compile(r"^EP\d{3,}$")
 MEDIA_RE = re.compile(r"^(clip\.mp4|audio\.mp3|tts/[A-Za-z0-9_-]+\.mp3)$")
 EXPR_ID_RE = L.SLUG_RE
+WORD_AUDIO = L.DATA_DIR / "word-audio"
 
 _cache: dict[str, tuple[tuple, dict | None]] = {}
 
@@ -140,14 +142,82 @@ async def attempt(request: Request):
         body = await request.json()
         eid, result, mode = body["expr"], body["result"], body.get("mode", "typing")
         lid = body.get("lesson")
+        kind = body.get("kind", "expr")
         wrong = int(body.get("wrong_tries", 0))
     except (ValueError, KeyError, TypeError):
-        raise HTTPException(400, "expected {expr, result, mode, lesson, wrong_tries}")
-    if not EXPR_ID_RE.match(str(eid)) or result not in ("known", "unknown") or mode not in ("typing", "flash") \
-            or (lid is not None and not LESSON_ID_RE.match(str(lid))):
+        raise HTTPException(400, "expected {expr, kind, result, mode, lesson, wrong_tries}")
+    id_ok = EXPR_ID_RE.match(str(eid)) if kind == "expr" else dictionary.WORD_RE.match(str(eid))
+    if kind not in ("expr", "word") or not id_ok or result not in ("known", "unknown") \
+            or mode not in ("typing", "flash") or (lid is not None and not LESSON_ID_RE.match(str(lid))):
         raise HTTPException(400, "invalid attempt")
-    progress.add_attempt(eid, result, mode, lid, max(0, min(wrong, 10)))
+    progress.add_attempt(eid, result, mode, lid, max(0, min(wrong, 10)), kind)
     return JSONResponse({"ok": True})
+
+
+# ---------- dictionary + word book ----------
+
+async def word_lookup(request: Request):
+    raw = request.path_params["word"]
+    if not dictionary.installed():
+        return JSONResponse({"found": False, "error": "dictionary not installed (run ./lesson dict install)"},
+                            status_code=503)
+    entry = dictionary.lookup(raw)
+    if entry is None:
+        return JSONResponse({"found": False, "query": raw}, status_code=404)
+    # book_key: what "add to word book" saves -- the clicked form when it has its own meaning ("excited")
+    book_key = entry["surface"] if entry.get("surface_translation") else entry["key"]
+    return JSONResponse({"found": True, **entry, "book_key": book_key,
+                         "audio": f"api/word-audio/{entry.get('surface') or entry['key']}"})
+
+
+async def word_audio(request: Request):
+    """TTS for a single word, generated on first request and cached in data/word-audio/."""
+    word = request.path_params["word"].lower()
+    if not dictionary.WORD_RE.match(word):
+        raise HTTPException(404)
+    f = WORD_AUDIO / f"{word}.mp3"
+    if not f.exists():
+        import edge_tts
+
+        WORD_AUDIO.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(".part")
+        try:
+            await edge_tts.Communicate(word, L.TTS_VOICE).save(str(tmp))
+            tmp.rename(f)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise HTTPException(503, "TTS unavailable")
+    return FileResponse(f, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=604800"})
+
+
+async def list_words(request: Request):
+    return JSONResponse([{**w, "audio": f"api/word-audio/{w['word']}"} for w in progress.words()])
+
+
+async def word_book(request: Request):
+    raw = request.path_params["word"]
+    if request.method == "DELETE":
+        if not dictionary.WORD_RE.match(raw.lower()):
+            raise HTTPException(400, "bad word")
+        progress.remove_word(raw.lower())
+        return JSONResponse(progress.snapshot()["words"])
+    entry = dictionary.lookup(raw)
+    if entry is None:
+        raise HTTPException(404, "word not in dictionary")
+    if entry.get("surface_translation") and raw.lower() == entry["surface"]:
+        # save "excited" (兴奋的) itself rather than its base "excite" (刺激)
+        entry = {**entry, "key": entry["surface"], "word": entry["surface"],
+                 "phonetic": entry.get("surface_phonetic") or "", "translation": entry["surface_translation"]}
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    lid = body.get("lesson")
+    if lid is not None and not LESSON_ID_RE.match(str(lid)):
+        lid = None
+    clip = lambda v: str(v)[:400] if v else None
+    progress.add_word(entry, lid, clip(body.get("context_en")), clip(body.get("context_zh")))
+    return JSONResponse(progress.snapshot()["words"])
 
 
 async def stats(request: Request):
@@ -156,7 +226,7 @@ async def stats(request: Request):
 
 
 async def health(request: Request):
-    return JSONResponse({"ok": True, "lessons": len(published())})
+    return JSONResponse({"ok": True, "lessons": len(published()), "dictionary": dictionary.installed()})
 
 
 # ---------- app ----------
@@ -196,6 +266,10 @@ routes = [
     Route("/api/checkins/{lesson_id}", checkin, methods=["PUT", "DELETE"]),
     Route("/api/favorites/{expr_id}", favorite, methods=["PUT", "DELETE"]),
     Route("/api/attempts", attempt, methods=["POST"]),
+    Route("/api/word/{word}", word_lookup),
+    Route("/api/word-audio/{word}", word_audio),
+    Route("/api/words", list_words),
+    Route("/api/words/{word}", word_book, methods=["PUT", "DELETE"]),
     Route("/api/stats", stats),
     Route("/media/{lesson_id}/{path:path}", media),
     Mount("/", app=NoCacheUI(StaticFiles(directory=WEB, html=True))),

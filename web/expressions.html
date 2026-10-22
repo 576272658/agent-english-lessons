@@ -17,27 +17,34 @@
 <link rel="stylesheet" href="style.css">
 <script src="app.js"></script>
 <script src="quiz.js"></script>
+<script src="word.js"></script>
 </head>
 <body>
 <div class="wrap" id="app"><div class="empty">加载中…</div></div>
 <script>
 const { esc, progress } = App;
-let LIB = [], favOnly = new URLSearchParams(location.search).has("fav");
+let LIB = [], WORDS = [], favOnly = false;
+let tab = location.hash === "#words" ? "words" : "expr";
 
 const haystack = (e) => [e.phrase, e.meaning_zh, e.note, e.pos, ...(e.tags || []), ...(e.synonyms || []).map((x) => x.phrase + x.zh),
   ...(e.related || []).map((x) => x.phrase + x.zh)].join(" ").toLowerCase();
-const visible = () => {
-  const q = document.getElementById("q").value.trim().toLowerCase();
-  return LIB.filter((e) => (!q || haystack(e).includes(q)) && (!favOnly || progress.isFav(e.id)));
-};
+const query = () => document.getElementById("q").value.trim().toLowerCase();
+const visibleExpr = () => LIB.filter((e) => (!query() || haystack(e).includes(query())) && (!favOnly || progress.isFav(e.id)));
+const visibleWords = () => WORDS.filter((w) => !query() || `${w.display} ${w.meaning} ${w.context_en || ""}`.toLowerCase().includes(query()));
 const list = (items) => items.map((x) => `${esc(x.phrase)} <span class="ex-zh" style="display:inline">${esc(x.zh)}</span>`).join("；");
+
+// bold the looked-up word inside its context sentence (also inflected forms: dry -> dried)
+function boldWord(sentence, word) {
+  const stem = word.toLowerCase().slice(0, Math.max(3, word.length - 1));
+  return esc(sentence).replace(/[A-Za-z][A-Za-z'’-]*/g, (t) => t.toLowerCase().startsWith(stem) ? `<b>${t}</b>` : t);
+}
 
 function shell() {
   document.getElementById("app").innerHTML = `
     ${App.nav("expressions")}
     <h1>表达库</h1>
-    <p class="tip" id="summary"></p>
-    <input class="search" id="q" placeholder="搜索英文、中文或标签…" autocomplete="off">
+    <div class="tabs"><button data-tab="expr"></button><button data-tab="words"></button></div>
+    <input class="search" id="q" autocomplete="off">
     <div class="btn-row" style="margin-bottom:16px">
       <button class="btn" id="favOnly"></button>
       <button class="btn primary" id="review">测验当前列表</button>
@@ -46,24 +53,36 @@ function shell() {
       <div class="btn-row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">复习测验</h3><button class="btn" id="closeQuiz">关闭</button></div>
       <div id="quiz"></div>
     </div>
+    <p class="tip" id="summary"></p>
     <div id="list"></div>`;
+  document.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => {
+    tab = b.dataset.tab; history.replaceState(null, "", tab === "words" ? "#words" : "#");
+    document.getElementById("quizCard").hidden = true; draw();
+  });
   document.getElementById("q").addEventListener("input", draw);
   document.getElementById("favOnly").onclick = () => { favOnly = !favOnly; draw(); };
   document.getElementById("review").onclick = () => {
-    const items = visible().slice().sort(() => Math.random() - 0.5);
+    const items = (tab === "words" ? visibleWords().map(App.wordQuizItem) : visibleExpr()).slice().sort(() => Math.random() - 0.5);
     document.getElementById("quizCard").hidden = false;
-    Quiz.mount(document.getElementById("quiz"), items);
+    Quiz.mount(document.getElementById("quiz"), items, { onFinish: refreshWords });
     document.getElementById("quizCard").scrollIntoView({ behavior: "smooth" });
   };
-  document.getElementById("closeQuiz").onclick = () => { document.getElementById("quizCard").hidden = true; draw(); };
+  document.getElementById("closeQuiz").onclick = () => { document.getElementById("quizCard").hidden = true; refreshWords(); };
+  Words.init({
+    context(el) {
+      const ex = el.closest("[data-en]");
+      return ex ? { context_en: ex.dataset.en, context_zh: ex.dataset.zh || "", lesson: ex.dataset.lesson || null } : null;
+    },
+  });
 }
 
-function draw() {
-  const rows = visible();
-  const fb = document.getElementById("favOnly");
-  fb.classList.toggle("on", favOnly); fb.textContent = `${favOnly ? "★" : "☆"} 只看收藏（${progress.favorites.size}）`;
-  document.getElementById("summary").textContent = `共 ${LIB.length} 个表达${rows.length !== LIB.length ? `，当前显示 ${rows.length} 个` : ""}`;
-  document.getElementById("list").innerHTML = rows.length ? rows.map((e) => `
+async function refreshWords() {
+  try { WORDS = await App.api("api/words"); await progress.load(); } catch {}
+  draw();
+}
+
+function drawExpressions(rows) {
+  return rows.length ? rows.map((e) => `
     <div class="card expr">
       <div><span class="phrase">${esc(e.phrase)}</span>${e.pos ? `<span class="tag">${esc(e.pos)}</span>` : ""}
         <button class="btn" data-play="${esc(e.id)}">🔊</button>
@@ -72,20 +91,63 @@ function draw() {
       <div><b>${esc(e.meaning_zh)}</b></div>
       <dl>
         ${e.note ? `<dt>用法</dt><dd>${esc(e.note)}</dd>` : ""}
-        <dt>例句</dt><dd>${e.examples.map((x) => `<span class="ex-en">${esc(x.en)}</span><span class="ex-zh">${esc(x.zh)}</span>`).join("")}</dd>
+        <dt>例句</dt><dd>${e.examples.map((x) => `<span class="ex-en ctx" data-en="${esc(x.en)}" data-zh="${esc(x.zh)}">${esc(x.en)}</span><span class="ex-zh">${esc(x.zh)}</span>`).join("")}</dd>
         ${e.synonyms?.length ? `<dt>同义表达</dt><dd>${list(e.synonyms)}</dd>` : ""}
         ${e.related?.length ? `<dt>相关表达</dt><dd>${list(e.related)}</dd>` : ""}
-        <dt>出现在 ${e.occurrences.length} 处原文</dt><dd>${e.occurrences.map((o) => `<span class="ex-en">${esc(o.en)} <a href="lesson.html?id=${o.lesson}">${esc(o.lesson)}</a></span><span class="ex-zh">${esc(o.zh)}</span>`).join("")}</dd>
+        <dt>出现在 ${e.occurrences.length} 处原文</dt><dd>${e.occurrences.map((o) => `<span class="ex-en"><span class="ctx" data-en="${esc(o.en)}" data-zh="${esc(o.zh)}" data-lesson="${esc(o.lesson)}">${esc(o.en)}</span> <a href="lesson.html?id=${o.lesson}">${esc(o.lesson)}</a></span><span class="ex-zh">${esc(o.zh)}</span>`).join("")}</dd>
       </dl>
-    </div>`).join("") : `<div class="empty">${LIB.length ? (favOnly ? "还没有收藏。点表达旁的 ☆ 或测验卡片右上角的星标收藏。" : "没有匹配的表达") : "表达库还是空的，完成第一课后这里会自动汇总。"}</div>`;
-  document.querySelectorAll("[data-fav]").forEach((b) => b.onclick = async () => { await progress.toggleFav(b.dataset.fav); draw(); });
-  document.querySelectorAll("[data-play]").forEach((b) => b.onclick = () => {
+    </div>`).join("")
+    : `<div class="empty">${LIB.length ? (favOnly ? "还没有收藏。点表达旁的 ☆ 或测验卡片右上角的星标收藏。" : "没有匹配的表达") : "表达库还是空的，完成第一课后这里会自动汇总。"}</div>`;
+}
+
+function drawWords(rows) {
+  return rows.length ? rows.map((w) => `
+    <div class="card expr">
+      <div><span class="phrase">${esc(w.display)}</span> <span class="ipa">${esc(w.phonetic || "")}</span>
+        <button class="btn" data-say-word="${esc(w.word)}">🔊</button>
+        <button class="btn" data-remove="${esc(w.word)}">移除</button></div>
+      <div><b>${esc(w.meaning)}</b></div>
+      ${w.context_en ? `<dl><dt>原句</dt><dd><span class="ex-en ctx" data-en="${esc(w.context_en)}" data-zh="${esc(w.context_zh || "")}" data-lesson="${esc(w.lesson_id || "")}">${boldWord(w.context_en, w.display)}</span>
+        <span class="ex-zh">${esc(w.context_zh || "")}</span></dd></dl>` : ""}
+      <div class="muted" style="margin-top:6px">${w.lesson_id ? `来自 <a href="lesson.html?id=${w.lesson_id}">${esc(w.lesson_id)}</a> · ` : ""}${esc(w.at.slice(0, 10))} 加入
+        · ${w.attempts ? `测验 ${w.attempts} 次，最近一次${w.last_result === "known" ? "✓ 答对" : "✗ 没答对"}` : "还没测验过"}</div>
+    </div>`).join("")
+    : `<div class="empty">${WORDS.length ? "没有匹配的生词" : "生词本还是空的。在课程里点击任意英文单词，就可以把它加入生词本。"}</div>`;
+}
+
+function draw() {
+  Words.close();
+  document.querySelectorAll("[data-tab]").forEach((b) => {
+    b.classList.toggle("on", b.dataset.tab === tab);
+    b.textContent = b.dataset.tab === "expr" ? `地道表达（${LIB.length}）` : `生词本（${WORDS.length}）`;
+  });
+  document.getElementById("q").placeholder = tab === "expr" ? "搜索英文、中文或标签…" : "搜索单词、释义或原句…";
+  const fb = document.getElementById("favOnly");
+  fb.hidden = tab !== "expr";
+  fb.classList.toggle("on", favOnly); fb.textContent = `${favOnly ? "★" : "☆"} 只看收藏（${progress.favorites.size}）`;
+
+  const rows = tab === "expr" ? visibleExpr() : visibleWords();
+  const total = tab === "expr" ? LIB.length : WORDS.length;
+  document.getElementById("summary").textContent = rows.length !== total ? `当前显示 ${rows.length} / ${total} 个` : "";
+  document.getElementById("review").disabled = !rows.length;
+  const listEl = document.getElementById("list");
+  listEl.innerHTML = tab === "expr" ? drawExpressions(rows) : drawWords(rows);
+  listEl.querySelectorAll(".ctx").forEach((el) => Words.wordify(el));
+
+  listEl.querySelectorAll("[data-fav]").forEach((b) => b.onclick = async () => { await progress.toggleFav(b.dataset.fav); draw(); });
+  listEl.querySelectorAll("[data-play]").forEach((b) => b.onclick = () => {
     const e = LIB.find((x) => x.id === b.dataset.play); App.play(e.tts, e.answer);
+  });
+  listEl.querySelectorAll("[data-say-word]").forEach((b) => b.onclick = () => {
+    const w = WORDS.find((x) => x.word === b.dataset.sayWord); App.play(w.audio, w.display);
+  });
+  listEl.querySelectorAll("[data-remove]").forEach((b) => b.onclick = async () => {
+    await progress.removeWord(b.dataset.remove); WORDS = WORDS.filter((w) => w.word !== b.dataset.remove); draw();
   });
 }
 
-Promise.all([App.api("api/expressions"), progress.load()])
-  .then(([lib]) => { LIB = lib; shell(); draw(); })
+Promise.all([App.api("api/expressions"), App.api("api/words"), progress.load()])
+  .then(([lib, words]) => { LIB = lib; WORDS = words; shell(); draw(); })
   .catch((e) => App.fail(document.getElementById("app"), e));
 </script>
 </body>

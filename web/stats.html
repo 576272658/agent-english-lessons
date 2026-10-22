@@ -54,13 +54,14 @@ function calendar(days) {
   </div>`;
 }
 
-function render(s, lib) {
+function render(s, lib, words) {
   const t = s.totals;
   const tiles = [
     ["学习天数", t.study_days, "天"],
     ["连续学习", t.streak, "天"],
     ["完成课程", t.lessons_done, `/ ${t.lessons_total}`],
     ["掌握表达", t.expressions_mastered, `/ ${t.expressions_total}`],
+    ["生词掌握", t.words_mastered, `/ ${t.words_total}`],
     ["测验正确率", t.accuracy ?? "–", t.accuracy == null ? "" : "%"],
   ];
   document.getElementById("app").innerHTML = `
@@ -68,19 +69,19 @@ function render(s, lib) {
     <h1>学习统计</h1>
     <div class="tiles">${tiles.map(([label, v, unit]) => `<div class="tile"><div class="tile-l">${label}</div>
       <div class="tile-v">${esc(v)}<span>${esc(unit)}</span></div></div>`).join("")}</div>
-    <p class="tip">「掌握」= 最近一次测验答对。学习次数 = 测验答题数 + 打卡数。共答题 ${t.quiz_attempts} 次。</p>
+    <p class="tip">「掌握」= 最近一次测验答对。生词在「表达库 → 生词本」里测验。学习次数 = 测验答题数 + 打卡数。共答题 ${t.quiz_attempts} 次。</p>
 
     <section class="card"><h2>最近 16 周</h2>${calendar(s.calendar)}</section>
 
-    <section class="card"><h2>最常出错的表达</h2>
+    <section class="card"><h2>最常出错的表达和生词</h2>
       ${s.weak.length ? `<p class="tip">没掌握的排在前面。测验这些表达可以把它们重新答对。</p>
-        <div class="btn-row" style="margin-bottom:10px"><button class="btn primary" id="reviewWeak">测验这些表达（${s.weak.length}）</button></div>
+        <div class="btn-row" style="margin-bottom:10px"><button class="btn primary" id="reviewWeak">测验这些（${s.weak.length}）</button></div>
         <div id="quizBox" hidden style="margin-bottom:16px"></div>
         <table class="tbl"><thead><tr><th>表达</th><th>错 / 答</th><th>最近一次</th><th>来源</th></tr></thead><tbody>
-        ${s.weak.map((w) => `<tr><td><b>${esc(w.phrase)}</b><div class="muted">${esc(w.meaning_zh)}</div></td>
+        ${s.weak.map((w) => `<tr><td><b>${esc(w.phrase)}</b>${w.kind === "word" ? ' <span class="tag">单词</span>' : ""}<div class="muted">${esc(w.meaning_zh)}</div></td>
           <td class="num">${w.missed} / ${w.attempts}</td>
           <td>${w.last_result === "known" ? "✓ 答对" : "✗ 没答对"}</td>
-          <td><a href="lesson.html?id=${w.lesson}">${esc(w.lesson)}</a></td></tr>`).join("")}
+          <td>${w.lesson ? `<a href="lesson.html?id=${w.lesson}">${esc(w.lesson)}</a>` : "–"}</td></tr>`).join("")}
         </tbody></table>`
       : `<div class="empty">还没有答错的记录。去课程里做做第 6 步的小测验吧。</div>`}
     </section>
@@ -99,14 +100,16 @@ function render(s, lib) {
   const btn = document.getElementById("reviewWeak");
   if (btn) btn.onclick = () => {
     const byId = Object.fromEntries(lib.map((e) => [e.id, e]));
-    const items = s.weak.map((w) => byId[w.id]).filter(Boolean);
+    const wordById = Object.fromEntries(words.map((w) => [w.word, w]));
+    const items = s.weak.map((w) => w.kind === "word"
+      ? (wordById[w.id] && App.wordQuizItem(wordById[w.id])) : byId[w.id]).filter(Boolean);
     const box = document.getElementById("quizBox"); box.hidden = false;
     Quiz.mount(box, items, { onFinish: () => App.toast("完成！刷新页面可看到最新统计") });
   };
 }
 
-Promise.all([App.api("api/stats"), App.api("api/expressions"), App.progress.load()])
-  .then(([s, lib]) => render(s, lib))
+Promise.all([App.api("api/stats"), App.api("api/expressions"), App.api("api/words"), App.progress.load()])
+  .then(([s, lib, words]) => render(s, lib, words))
   .catch((e) => App.fail(document.getElementById("app"), e));
 </script>
 </body>

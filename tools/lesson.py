@@ -554,6 +554,21 @@ def cmd_progress(args) -> None:
         print("\nNo missed expressions yet.")
 
 
+def cmd_dict(args) -> None:
+    import dictionary
+
+    if args.action == "install":
+        dictionary.install(force=args.force)
+        return
+    if not args.word:
+        die("usage: ./lesson dict lookup <word>")
+    entry = dictionary.lookup(args.word)
+    if entry is None:
+        print("not found" if dictionary.installed() else "dictionary not installed: ./lesson dict install")
+        sys.exit(1)
+    print(json.dumps(entry, ensure_ascii=False, indent=2))
+
+
 SERVICE_LABEL = "com.agent-english-lessons.server"
 
 
@@ -657,6 +672,12 @@ def main() -> None:
     ex = sub.add_parser("expressions", help="list existing expression ids (reuse them in new lessons)")
     ex.add_argument("--json", action="store_true")
     ex.set_defaults(func=cmd_expressions)
+
+    dc = sub.add_parser("dict", help="click-to-look-up dictionary (ECDICT): install once, or look up a word")
+    dc.add_argument("action", choices=["install", "lookup"])
+    dc.add_argument("word", nargs="?")
+    dc.add_argument("--force", action="store_true", help="rebuild even if installed")
+    dc.set_defaults(func=cmd_dict)
 
     sv = sub.add_parser("serve", help="run the web app in the foreground")
     sv.add_argument("--host", default="127.0.0.1")

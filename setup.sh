@@ -21,6 +21,9 @@ fi
 echo "==> installing Python dependencies"
 uv sync
 
+echo "==> installing the click-to-look-up dictionary (ECDICT, ~63 MB download, once)"
+uv run --quiet python tools/lesson.py dict install
+
 chmod +x lesson
 echo
 echo "Ready. Try:  ./lesson new \"https://www.youtube.com/watch?v=...\" --start 0:30 --end 1:15"

@@ -30,6 +30,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
@@ -74,7 +75,7 @@ mark.hl { background: var(--mark); color: var(--mark-text); border-radius: 4px; 
 .expr { border-top: 1px solid var(--border); padding-top: 14px; }
 .expr .phrase { font-size: 20px; font-weight: 600; }
 .expr .ipa { color: var(--muted); font-family: "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", serif; }
-.expr .tag { display: inline-block; font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; margin-left: 6px; }
+.expr .tag, .tbl .tag { display: inline-block; font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; margin-left: 6px; }
 .expr dl { margin: 10px 0 0; }
 .expr dt { font-size: 13px; color: var(--muted); margin-top: 10px; }
 .expr dd { margin: 2px 0 0; }
@@ -98,6 +99,35 @@ mark.hl { background: var(--mark); color: var(--mark-text); border-radius: 4px; 
 .speed { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
 .speed button { border: 0; background: transparent; color: var(--text); padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
 .speed button.on { background: var(--accent); color: #fff; }
+
+/* click-to-look-up */
+.w { cursor: pointer; border-radius: 3px; transition: background .1s; }
+.w:hover { background: var(--accent-soft); }
+.w.sel { background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.wpop { position: absolute; z-index: 20; width: 340px; max-width: calc(100vw - 16px); background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; box-shadow: 0 8px 28px rgba(0, 0, 0, .16); font-size: 15px; line-height: 1.6; }
+.wpop.sheet { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; max-width: none; max-height: 70vh; overflow-y: auto; border-radius: 16px 16px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); animation: sheet-up .18s ease-out; }
+@keyframes sheet-up { from { transform: translateY(30px); opacity: 0; } }
+.wpop-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-right: 28px; position: relative; }
+.wpop-word { font-size: 22px; font-weight: 700; }
+.wpop-ipa { color: var(--muted); font-family: "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", serif; }
+.wpop-head .q-say { width: 34px; height: 34px; font-size: 16px; }
+.wpop-x { position: absolute; right: -6px; top: -4px; border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 4px 8px; }
+.wpop-note { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.wpop-own { margin-top: 6px; padding: 6px 10px; background: var(--surface-2); border-radius: 8px; font-size: 14px; }
+.wpop-expr { display: block; width: 100%; text-align: left; margin: 8px 0 2px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 14px; cursor: pointer; }
+.wpop-tr { list-style: none; padding: 0; margin: 8px 0; }
+.wpop-tr li { padding: 1px 0; }
+.wpop-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
+.wpop-tags span { font-size: 12px; border: 1px solid var(--border); color: var(--muted); border-radius: 4px; padding: 0 6px; }
+.wpop-def { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.wpop-def summary { cursor: pointer; }
+.wpop-add { width: 100%; justify-content: center; padding: 8px 12px; }
+
+/* tabs (library: expressions | word book) */
+.tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.tabs button { border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 6px 16px; font: inherit; cursor: pointer; }
+.tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ctx b { color: var(--accent); }
 
 /* quiz */
 .q-tabs { display: flex; width: max-content; margin: 0 auto 16px; background: var(--surface-2); border-radius: 10px; padding: 4px; }

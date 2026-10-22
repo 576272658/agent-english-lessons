@@ -25,7 +25,7 @@ Requirements: git, Homebrew (macOS), Tailscale installed and logged in
 ```sh
 git clone https://github.com/576272658/agent-english-lessons.git
 cd agent-english-lessons
-./setup.sh                    # installs uv, ffmpeg, Python deps
+./setup.sh                    # installs uv, ffmpeg, Python deps, and the dictionary (~63 MB download)
 ```
 
 Pick a stable location (e.g. next to the machine's other services). The
@@ -40,7 +40,7 @@ Pick a free local port per this machine's conventions, then:
 lsof -nP -iTCP:<PORT> -sTCP:LISTEN     # must print nothing
 ./lesson service install --port <PORT>  # launchd: starts at login, restarts on crash
 ./lesson service status                 # state: running
-curl -s http://127.0.0.1:<PORT>/api/health   # {"ok":true,"lessons":0}
+curl -s http://127.0.0.1:<PORT>/api/health   # {"ok":true,"lessons":0,"dictionary":true}
 ```
 
 The server binds to `127.0.0.1` only; Tailscale exposes it in the next step.
@@ -94,12 +94,12 @@ is saved on the server and shared across devices.
 
 | Task | Command |
 |---|---|
-| Update to latest code | `git pull && uv sync && ./lesson service restart` |
+| Update to latest code | `git pull && uv sync && ./lesson dict install && ./lesson service restart` (`dict install` is a no-op once installed) |
 | Status / logs | `./lesson service status`, `tail -n 50 data/server.log` |
 | Restart | `./lesson service restart` |
 | Change port | `./lesson service install --port <NEW>` then update `tailscale serve` |
 | Stop and remove | `./lesson service uninstall` (and remove its `tailscale serve` entry) |
-| Backup | copy `lessons/` and `data/` (all user data lives there) |
+| Backup | copy `lessons/` and `data/progress.db` (the rest of `data/` can be regenerated) |
 
 Updating never touches `lessons/` or `data/`; both are git-ignored.
 

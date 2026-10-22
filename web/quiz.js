@@ -1,6 +1,6 @@
 /* Expression quiz (typing + flashcard), used by lesson pages and the expression library.
  *   Quiz.mount(el, items, { onFinish(results) {} })
- * items: [{ id, lesson, phrase, answer, phonetic, pos, meaning_zh, examples, tts }]
+ * items: [{ id, kind: "expr"|"word", lesson, phrase, answer, phonetic, pos, meaning_zh, examples, tts }]
  * Every answer is recorded on the server (App.progress.recordAttempt); favorites are server-side too.
  */
 (function () {
@@ -31,7 +31,7 @@
       const item = st.items[st.i];
       if (item.id in st.results) return;
       st.results[item.id] = result;
-      progress.recordAttempt({ expr: item.id, lesson: item.lesson || null, result, mode: st.mode,
+      progress.recordAttempt({ expr: item.id, kind: item.kind || "expr", lesson: item.lesson || null, result, mode: st.mode,
         wrong_tries: st.mode === "typing" ? MAX_TRIES - st.tries : 0 });
     }
 
@@ -68,7 +68,7 @@
       const item = st.items[st.i];
       const words = item.answer.split(" ");
       const head = `<div class="q-progress">${st.i + 1} / ${st.items.length}</div>
-        <button class="q-star ${progress.isFav(item.id) ? "on" : ""}" data-act="fav" title="收藏">${progress.isFav(item.id) ? "★" : "☆"}</button>
+        ${item.kind === "word" ? "" : `<button class="q-star ${progress.isFav(item.id) ? "on" : ""}" data-act="fav" title="收藏">${progress.isFav(item.id) ? "★" : "☆"}</button>`}
         <div class="q-zh">${esc(item.meaning_zh)} <button class="q-say" data-act="say" title="播放发音">🔊</button></div>
         ${item.pos ? `<div><span class="q-pos">${esc(item.pos)}</span></div>` : ""}`;
 

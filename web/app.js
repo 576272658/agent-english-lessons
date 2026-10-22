@@ -17,9 +17,10 @@
   const progress = {
     checkins: {},
     favorites: new Set(),
+    words: new Set(),
     async load() {
       const p = await api("api/progress");
-      this.checkins = p.checkins; this.favorites = new Set(p.favorites);
+      this.checkins = p.checkins; this.favorites = new Set(p.favorites); this.words = new Set(p.words);
     },
     isDone(id) { return id in this.checkins; },
     async setDone(id, done) {
@@ -32,6 +33,15 @@
       fav ? this.favorites.add(id) : this.favorites.delete(id);
       try { this.favorites = new Set(await api(`api/favorites/${id}`, { method: fav ? "PUT" : "DELETE" })); } catch (e) { toast("收藏没有保存成功，请检查网络"); }
       return fav;
+    },
+    hasWord(key) { return this.words.has(key); },
+    async addWord(key, body) {
+      try { this.words = new Set(await api(`api/words/${encodeURIComponent(key)}`, { method: "PUT", body })); toast("已加入生词本"); }
+      catch (e) { toast("加入生词本失败，请检查网络"); }
+    },
+    async removeWord(key) {
+      try { this.words = new Set(await api(`api/words/${encodeURIComponent(key)}`, { method: "DELETE" })); }
+      catch (e) { toast("移除失败，请检查网络"); }
     },
     recordAttempt(a) {
       api("api/attempts", { method: "POST", body: a }).catch(() => toast("测验记录没有保存成功"));
@@ -75,5 +85,12 @@
     set(k, v) { try { localStorage.setItem("pref:" + k, v); } catch {} },
   };
 
-  window.App = { esc, api, progress, nav, play, speak, toast, fail, pref };
+  // A word-book row (api/words) as a quiz item
+  const wordQuizItem = (w) => ({
+    id: w.word, kind: "word", lesson: w.lesson_id, phrase: w.display, answer: w.display, phonetic: w.phonetic,
+    pos: "单词", meaning_zh: w.meaning, tts: w.audio,
+    examples: w.context_en ? [{ en: w.context_en, zh: w.context_zh || "" }] : [],
+  });
+
+  window.App = { esc, api, progress, nav, play, speak, toast, fail, pref, wordQuizItem };
 })();
