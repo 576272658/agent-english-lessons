@@ -3,7 +3,7 @@
 This is the one step a script cannot do: turning a raw transcript into a lesson.
 You (the AI agent) read `transcript.txt` / `transcript.json` and write
 `lessons/EPxxx/lesson.json`. Then run `./lesson finish EPxxx`, which validates
-the file, generates TTS and builds the page. If validation fails it prints
+the file, generates TTS and publishes the lesson to the web app. If validation fails it prints
 every problem; fix them and run `finish` again.
 
 The learner is a **Chinese native speaker** learning **spoken American English**
@@ -102,9 +102,9 @@ All timestamps are seconds **relative to the clip** (0 = start of `clip.mp4`).
 - Don't pick words the learner surely knows (*good morning*, *very*), or
   proper nouns.
 - ✔ `id` is lowercase-kebab-case and unique in the lesson. **Reuse the same
-  id across lessons** for the same expression — check `expressions.json` in
-  the project root (the merged library) before inventing a new id, so the
-  library links occurrences together.
+  id across lessons** for the same expression — run `./lesson expressions`
+  to list existing ids before inventing a new one, so the expression library
+  and the learner's quiz history link up.
 - `examples`: 1–2 new, everyday sentences (not copied from the video) with
   natural Chinese.
 - **Quiz answer.** Step 6 plays the expression's audio and the learner types
@@ -119,8 +119,8 @@ All timestamps are seconds **relative to the clip** (0 = start of `clip.mp4`).
 ### Title and topic
 - `title`: Chinese, the pattern used by the course: name 2–3 of the key
   ideas, end with 怎么说？ — e.g. `阳光明媚、天气阴沉怎么说？`
-- `topic`: reuse an existing topic when it fits (`./lesson status` and
-  `index.html` show existing lessons). Examples: 天气季节, 日常作息, 美妆护肤,
+- `topic`: reuse an existing topic when it fits (`./lesson status` lists
+  existing lessons; their `lesson.json` has the topic). Examples: 天气季节, 日常作息, 美妆护肤,
   饮食, 运动健身, 情绪感受, 工作学习, 购物穿搭, 旅行, 人际关系, 科技数码.
 
 ## How the page uses each field
@@ -137,4 +137,5 @@ All timestamps are seconds **relative to the clip** (0 = start of `clip.mp4`).
 ## Editing later
 
 Edit `lesson.json` and run `./lesson finish EPxxx` again. TTS is regenerated
-only for sentences whose `en` changed. Never edit generated `index.html` files.
+only for text that changed. The web app picks up the change on the next page
+load (an invalid `lesson.json` hides the lesson until it is fixed).

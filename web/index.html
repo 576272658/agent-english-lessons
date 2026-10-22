@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>英语课程</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+</head>
+<body>
+<div class="wrap" id="app"><div class="empty">加载中…</div></div>
+<script>
+const { esc, progress } = App;
+let LESSONS = [], topic = "", todoOnly = false;
+
+function shell() {
+  document.getElementById("app").innerHTML = `
+    ${App.nav("courses")}
+    <h1>地道口语 · 六步精学</h1>
+    <p class="tip" id="summary"></p>
+    <input class="search" id="q" placeholder="搜索标题、主题或博主…" autocomplete="off">
+    <div class="chips" id="topics"></div>
+    <div class="grid" id="list"></div>`;
+  document.getElementById("q").addEventListener("input", draw);
+}
+
+function draw() {
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const topics = [...new Set(LESSONS.map((l) => l.topic))];
+  document.getElementById("topics").innerHTML = LESSONS.length ? [
+    `<button class="chip ${!topic && !todoOnly ? "on" : ""}" data-topic="">全部</button>`,
+    `<button class="chip ${todoOnly ? "on" : ""}" data-todo>未打卡</button>`,
+    ...topics.map((t) => `<button class="chip ${t === topic ? "on" : ""}" data-topic="${esc(t)}">${esc(t)}</button>`),
+  ].join("") : "";
+  document.querySelectorAll("[data-topic]").forEach((b) => b.onclick = () => { topic = b.dataset.topic; todoOnly = false; draw(); });
+  document.querySelector("[data-todo]")?.addEventListener("click", () => { todoOnly = !todoOnly; topic = ""; draw(); });
+
+  const rows = LESSONS
+    .filter((l) => !topic || l.topic === topic)
+    .filter((l) => !todoOnly || !progress.isDone(l.id))
+    .filter((l) => !q || `${l.id} ${l.title} ${l.topic} ${l.channel ?? ""}`.toLowerCase().includes(q))
+    .slice().reverse();  // newest first
+  const done = LESSONS.filter((l) => progress.isDone(l.id)).length;
+  document.getElementById("summary").textContent = `共 ${LESSONS.length} 课，已打卡 ${done} 课`;
+  document.getElementById("list").innerHTML = rows.length ? rows.map((l) => `
+    <a class="lesson-card" href="lesson.html?id=${l.id}">
+      <div class="ep">${esc(l.id)} ${progress.isDone(l.id) ? '<span class="badge">✓ 已打卡</span>' : ""}</div>
+      <div class="t">${esc(l.title)}</div>
+      <div class="m">${esc(l.topic)}${l.channel ? " · " + esc(l.channel) : ""}</div>
+      <div class="m">${l.n_sentences} 句 · ${l.n_expressions} 个表达${l.duration ? " · " + Math.round(l.duration) + " 秒" : ""}${l.created ? " · " + esc(l.created) : ""}</div>
+    </a>`).join("") : `<div class="empty">${LESSONS.length ? "没有匹配的课程" : "还没有课程。把视频链接发给 Agent，它生成后刷新这里就能看到。"}</div>`;
+}
+
+Promise.all([App.api("api/lessons"), progress.load()])
+  .then(([lessons]) => { LESSONS = lessons; shell(); draw(); })
+  .catch((e) => App.fail(document.getElementById("app"), e));
+</script>
+</body>
+</html>

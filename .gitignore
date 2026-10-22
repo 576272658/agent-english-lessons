@@ -1,9 +1,6 @@
-# user content: downloaded media and generated lessons
+# learner content: downloaded media, lessons, progress database, server log
 /lessons/
-/index.html
-/expressions.html
-/expressions.json
-/assets/
+/data/
 
 # python / uv
 .venv/

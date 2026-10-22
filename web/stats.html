@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学习统计</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+<script src="quiz.js"></script>
+</head>
+<body>
+<div class="wrap" id="app"><div class="empty">加载中…</div></div>
+<script>
+const { esc } = App;
+const WEEKDAYS = ["一", "", "三", "", "五", "", "日"];
+
+function level(n, max) {
+  if (!n) return 0;
+  return Math.min(4, Math.ceil((n / Math.max(max, 4)) * 4));
+}
+
+function calendar(days) {
+  const max = Math.max(...days.map((d) => d.count));
+  const first = new Date(days[0].day + "T00:00:00");
+  const pad = (first.getDay() + 6) % 7;  // Monday = 0
+  const cells = Array(pad).fill(null).concat(days);
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  const months = weeks.map((w, i) => {
+    const d = w.find(Boolean); if (!d) return "";
+    const m = Number(d.day.slice(5, 7)), prev = weeks[i - 1]?.find(Boolean);
+    return !prev || Number(prev.day.slice(5, 7)) !== m ? `${m}月` : "";
+  });
+  return `<div class="cal" role="img" aria-label="最近 ${days.length} 天的学习记录">
+    <div class="cal-months"><span></span>${months.map((m) => `<span>${m}</span>`).join("")}</div>
+    <div class="cal-body">
+      <div class="cal-wd">${WEEKDAYS.map((w) => `<span>${w}</span>`).join("")}</div>
+      ${weeks.map((w) => `<div class="cal-col">${w.map((d) => d
+        ? `<span class="cell l${level(d.count, max)}" data-tip="${d.day}：${d.count ? d.count + " 次学习" : "没有学习"}"></span>`
+        : `<span class="cell pad"></span>`).join("")}</div>`).join("")}
+    </div>
+    <div class="cal-legend">少 <span class="cell l0"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span> 多</div>
+    <div class="cal-tip" id="calTip">点按或悬停格子查看当天记录</div>
+  </div>`;
+}
+
+function render(s, lib) {
+  const t = s.totals;
+  const tiles = [
+    ["学习天数", t.study_days, "天"],
+    ["连续学习", t.streak, "天"],
+    ["完成课程", t.lessons_done, `/ ${t.lessons_total}`],
+    ["掌握表达", t.expressions_mastered, `/ ${t.expressions_total}`],
+    ["测验正确率", t.accuracy ?? "–", t.accuracy == null ? "" : "%"],
+  ];
+  document.getElementById("app").innerHTML = `
+    ${App.nav("stats")}
+    <h1>学习统计</h1>
+    <div class="tiles">${tiles.map(([label, v, unit]) => `<div class="tile"><div class="tile-l">${label}</div>
+      <div class="tile-v">${esc(v)}<span>${esc(unit)}</span></div></div>`).join("")}</div>
+    <p class="tip">「掌握」= 最近一次测验答对。学习次数 = 测验答题数 + 打卡数。共答题 ${t.quiz_attempts} 次。</p>
+
+    <section class="card"><h2>最近 16 周</h2>${calendar(s.calendar)}</section>
+
+    <section class="card"><h2>最常出错的表达</h2>
+      ${s.weak.length ? `<p class="tip">没掌握的排在前面。测验这些表达可以把它们重新答对。</p>
+        <div class="btn-row" style="margin-bottom:10px"><button class="btn primary" id="reviewWeak">测验这些表达（${s.weak.length}）</button></div>
+        <div id="quizBox" hidden style="margin-bottom:16px"></div>
+        <table class="tbl"><thead><tr><th>表达</th><th>错 / 答</th><th>最近一次</th><th>来源</th></tr></thead><tbody>
+        ${s.weak.map((w) => `<tr><td><b>${esc(w.phrase)}</b><div class="muted">${esc(w.meaning_zh)}</div></td>
+          <td class="num">${w.missed} / ${w.attempts}</td>
+          <td>${w.last_result === "known" ? "✓ 答对" : "✗ 没答对"}</td>
+          <td><a href="lesson.html?id=${w.lesson}">${esc(w.lesson)}</a></td></tr>`).join("")}
+        </tbody></table>`
+      : `<div class="empty">还没有答错的记录。去课程里做做第 6 步的小测验吧。</div>`}
+    </section>
+
+    <section class="card"><h2>最近打卡</h2>
+      ${s.recent.length ? `<ul class="plain">${s.recent.map((r) => `<li><a href="lesson.html?id=${r.lesson}">${esc(r.lesson)} ${esc(r.title || "")}</a>
+        <span class="muted">${esc(r.at.slice(0, 16).replace("T", " "))}</span></li>`).join("")}</ul>`
+      : `<div class="empty">还没有打卡记录</div>`}
+    </section>`;
+
+  const tip = document.getElementById("calTip");
+  document.querySelectorAll(".cal .cell[data-tip]").forEach((c) => {
+    const show = () => { tip.textContent = c.dataset.tip; document.querySelectorAll(".cell.sel").forEach((x) => x.classList.remove("sel")); c.classList.add("sel"); };
+    c.addEventListener("mouseenter", show); c.addEventListener("click", show);
+  });
+  const btn = document.getElementById("reviewWeak");
+  if (btn) btn.onclick = () => {
+    const byId = Object.fromEntries(lib.map((e) => [e.id, e]));
+    const items = s.weak.map((w) => byId[w.id]).filter(Boolean);
+    const box = document.getElementById("quizBox"); box.hidden = false;
+    Quiz.mount(box, items, { onFinish: () => App.toast("完成！刷新页面可看到最新统计") });
+  };
+}
+
+Promise.all([App.api("api/stats"), App.api("api/expressions"), App.progress.load()])
+  .then(([s, lib]) => render(s, lib))
+  .catch((e) => App.fail(document.getElementById("app"), e));
+</script>
+</body>
+</html>

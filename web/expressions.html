@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>表达库</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+<script src="quiz.js"></script>
+</head>
+<body>
+<div class="wrap" id="app"><div class="empty">加载中…</div></div>
+<script>
+const { esc, progress } = App;
+let LIB = [], favOnly = new URLSearchParams(location.search).has("fav");
+
+const haystack = (e) => [e.phrase, e.meaning_zh, e.note, e.pos, ...(e.tags || []), ...(e.synonyms || []).map((x) => x.phrase + x.zh),
+  ...(e.related || []).map((x) => x.phrase + x.zh)].join(" ").toLowerCase();
+const visible = () => {
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  return LIB.filter((e) => (!q || haystack(e).includes(q)) && (!favOnly || progress.isFav(e.id)));
+};
+const list = (items) => items.map((x) => `${esc(x.phrase)} <span class="ex-zh" style="display:inline">${esc(x.zh)}</span>`).join("；");
+
+function shell() {
+  document.getElementById("app").innerHTML = `
+    ${App.nav("expressions")}
+    <h1>表达库</h1>
+    <p class="tip" id="summary"></p>
+    <input class="search" id="q" placeholder="搜索英文、中文或标签…" autocomplete="off">
+    <div class="btn-row" style="margin-bottom:16px">
+      <button class="btn" id="favOnly"></button>
+      <button class="btn primary" id="review">测验当前列表</button>
+    </div>
+    <div class="card" id="quizCard" hidden>
+      <div class="btn-row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">复习测验</h3><button class="btn" id="closeQuiz">关闭</button></div>
+      <div id="quiz"></div>
+    </div>
+    <div id="list"></div>`;
+  document.getElementById("q").addEventListener("input", draw);
+  document.getElementById("favOnly").onclick = () => { favOnly = !favOnly; draw(); };
+  document.getElementById("review").onclick = () => {
+    const items = visible().slice().sort(() => Math.random() - 0.5);
+    document.getElementById("quizCard").hidden = false;
+    Quiz.mount(document.getElementById("quiz"), items);
+    document.getElementById("quizCard").scrollIntoView({ behavior: "smooth" });
+  };
+  document.getElementById("closeQuiz").onclick = () => { document.getElementById("quizCard").hidden = true; draw(); };
+}
+
+function draw() {
+  const rows = visible();
+  const fb = document.getElementById("favOnly");
+  fb.classList.toggle("on", favOnly); fb.textContent = `${favOnly ? "★" : "☆"} 只看收藏（${progress.favorites.size}）`;
+  document.getElementById("summary").textContent = `共 ${LIB.length} 个表达${rows.length !== LIB.length ? `，当前显示 ${rows.length} 个` : ""}`;
+  document.getElementById("list").innerHTML = rows.length ? rows.map((e) => `
+    <div class="card expr">
+      <div><span class="phrase">${esc(e.phrase)}</span>${e.pos ? `<span class="tag">${esc(e.pos)}</span>` : ""}
+        <button class="btn" data-play="${esc(e.id)}">🔊</button>
+        <button class="btn" data-fav="${esc(e.id)}">${progress.isFav(e.id) ? "★ 已收藏" : "☆ 收藏"}</button></div>
+      <div class="ipa">${esc(e.phonetic)}</div>
+      <div><b>${esc(e.meaning_zh)}</b></div>
+      <dl>
+        ${e.note ? `<dt>用法</dt><dd>${esc(e.note)}</dd>` : ""}
+        <dt>例句</dt><dd>${e.examples.map((x) => `<span class="ex-en">${esc(x.en)}</span><span class="ex-zh">${esc(x.zh)}</span>`).join("")}</dd>
+        ${e.synonyms?.length ? `<dt>同义表达</dt><dd>${list(e.synonyms)}</dd>` : ""}
+        ${e.related?.length ? `<dt>相关表达</dt><dd>${list(e.related)}</dd>` : ""}
+        <dt>出现在 ${e.occurrences.length} 处原文</dt><dd>${e.occurrences.map((o) => `<span class="ex-en">${esc(o.en)} <a href="lesson.html?id=${o.lesson}">${esc(o.lesson)}</a></span><span class="ex-zh">${esc(o.zh)}</span>`).join("")}</dd>
+      </dl>
+    </div>`).join("") : `<div class="empty">${LIB.length ? (favOnly ? "还没有收藏。点表达旁的 ☆ 或测验卡片右上角的星标收藏。" : "没有匹配的表达") : "表达库还是空的，完成第一课后这里会自动汇总。"}</div>`;
+  document.querySelectorAll("[data-fav]").forEach((b) => b.onclick = async () => { await progress.toggleFav(b.dataset.fav); draw(); });
+  document.querySelectorAll("[data-play]").forEach((b) => b.onclick = () => {
+    const e = LIB.find((x) => x.id === b.dataset.play); App.play(e.tts, e.answer);
+  });
+}
+
+Promise.all([App.api("api/expressions"), progress.load()])
+  .then(([lib]) => { LIB = lib; shell(); draw(); })
+  .catch((e) => App.fail(document.getElementById("app"), e));
+</script>
+</body>
+</html>

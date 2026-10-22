@@ -1,35 +1,16 @@
-/* Expression quiz (typing + flashcard), shared by lesson pages and the expression library.
- * Generated pages load assets/quiz.js. Usage:
- *   Quiz.mount(el, items, { base: "", onFinish(results) {} })
- * items: [{ id, phrase, answer, phonetic, pos, meaning_zh, examples, tts }]
- * base:  prefix prepended to item.tts (path of the page relative to where tts paths start)
+/* Expression quiz (typing + flashcard), used by lesson pages and the expression library.
+ *   Quiz.mount(el, items, { onFinish(results) {} })
+ * items: [{ id, lesson, phrase, answer, phonetic, pos, meaning_zh, examples, tts }]
+ * Every answer is recorded on the server (App.progress.recordAttempt); favorites are server-side too.
  */
 (function () {
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const store = {
-    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-    set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
-  };
+  const { esc, progress } = App;
   const norm = (w) => w.toLowerCase().replace(/[’‘`]/g, "'").trim();
   const MAX_TRIES = 3;
-  const isFav = (id) => !!store.get("fav:" + id);
-  const toggleFav = (id) => store.set("fav:" + id, isFav(id) ? null : "1");
-
-  let audio = null;
-  function say(item, base) {
-    if (audio) audio.pause();
-    if (item.tts) { audio = new Audio(base + item.tts); audio.play().catch(() => speak(item.answer)); }
-    else speak(item.answer);
-  }
-  function speak(text) {
-    if (!("speechSynthesis" in window)) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.lang = "en-US"; speechSynthesis.speak(u);
-  }
+  const say = (item) => App.play(item.tts, item.answer);
 
   function mount(root, allItems, opts = {}) {
-    const base = opts.base || "";
-    const st = { mode: store.get("quiz:mode") || "typing", items: allItems.slice(), i: 0, results: {}, tries: MAX_TRIES, revealed: false, flipped: false, finished: false };
+    const st = { mode: App.pref.get("quiz-mode", "typing"), items: allItems.slice(), i: 0, results: {}, tries: MAX_TRIES, revealed: false, flipped: false, finished: false };
     let advanceTimer = 0;
 
     function reset(items) {
@@ -48,7 +29,10 @@
     }
     function mark(result) {
       const item = st.items[st.i];
-      if (!(item.id in st.results)) st.results[item.id] = result;
+      if (item.id in st.results) return;
+      st.results[item.id] = result;
+      progress.recordAttempt({ expr: item.id, lesson: item.lesson || null, result, mode: st.mode,
+        wrong_tries: st.mode === "typing" ? MAX_TRIES - st.tries : 0 });
     }
 
     function answerPanel(item) {
@@ -84,7 +68,7 @@
       const item = st.items[st.i];
       const words = item.answer.split(" ");
       const head = `<div class="q-progress">${st.i + 1} / ${st.items.length}</div>
-        <button class="q-star ${isFav(item.id) ? "on" : ""}" data-act="fav" title="收藏">${isFav(item.id) ? "★" : "☆"}</button>
+        <button class="q-star ${progress.isFav(item.id) ? "on" : ""}" data-act="fav" title="收藏">${progress.isFav(item.id) ? "★" : "☆"}</button>
         <div class="q-zh">${esc(item.meaning_zh)} <button class="q-say" data-act="say" title="播放发音">🔊</button></div>
         ${item.pos ? `<div><span class="q-pos">${esc(item.pos)}</span></div>` : ""}`;
 
@@ -121,14 +105,14 @@
       const fb = root.querySelector("[data-fb]");
       if (ok.every(Boolean)) {
         mark("known");
-        say(item, base);
+        say(item);
         fb.innerHTML = `<span class="good">✓ 正确！</span>`;
         inputs.forEach((x) => x.disabled = true);
         advanceTimer = setTimeout(next, 1300);
         return;
       }
       st.tries -= 1;
-      if (st.tries <= 0) { mark("unknown"); st.revealed = true; draw(); say(item, base); return; }
+      if (st.tries <= 0) { mark("unknown"); st.revealed = true; draw(); say(item); return; }
       root.querySelector(".q-tries").textContent = `💪 剩余尝试次数：${st.tries} 次`;
       fb.innerHTML = `<span class="badc">再想想，标红的单词不对</span>`;
       inputs.find((x, k) => !ok[k])?.select();
@@ -136,18 +120,18 @@
 
     function wire() {
       root.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => {
-        st.mode = b.dataset.mode; store.set("quiz:mode", st.mode); st.revealed = false; st.flipped = false; draw();
+        st.mode = b.dataset.mode; App.pref.set("quiz-mode", st.mode); st.revealed = false; st.flipped = false; draw();
       });
       root.querySelectorAll("[data-act]").forEach((b) => b.onclick = () => {
         const item = st.items[st.i];
         switch (b.dataset.act) {
-          case "say": say(item, base); break;
-          case "fav": toggleFav(item.id); b.classList.toggle("on", isFav(item.id)); b.textContent = isFav(item.id) ? "★" : "☆"; break;
-          case "flip": st.flipped = true; draw(); say(item, base); break;
-          case "peek": mark("unknown"); st.revealed = true; draw(); say(item, base); break;
+          case "say": say(item); break;
+          case "fav": progress.toggleFav(item.id).then((on) => { b.classList.toggle("on", on); b.textContent = on ? "★" : "☆"; }); break;
+          case "flip": st.flipped = true; draw(); say(item); break;
+          case "peek": mark("unknown"); st.revealed = true; draw(); say(item); break;
           case "unknown":
             mark("unknown");
-            if (st.mode === "typing" || !st.flipped) { st.revealed = true; st.flipped = true; draw(); say(item, base); } else next();
+            if (st.mode === "typing" || !st.flipped) { st.revealed = true; st.flipped = true; draw(); say(item); } else next();
             break;
           case "known": mark("known"); next(); break;
           case "next": next(); break;
@@ -178,5 +162,5 @@
     return { reset };
   }
 
-  window.Quiz = { mount, isFav, toggleFav };
+  window.Quiz = { mount };
 })();

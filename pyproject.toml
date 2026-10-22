@@ -8,6 +8,8 @@ requires-python = ">=3.10"
 dependencies = [
     "yt-dlp",
     "edge-tts",
+    "starlette",
+    "uvicorn",
     # Apple Silicon Macs use MLX (fast, GPU); everything else uses faster-whisper.
     "mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "faster-whisper; sys_platform != 'darwin' or platform_machine != 'arm64'",

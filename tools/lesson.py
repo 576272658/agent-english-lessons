@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Lesson pipeline CLI. See AGENTS.md for the full workflow.
 
-Mechanical steps only (download, clip, transcribe, TTS, HTML build).
+Mechanical steps only (download, clip, transcribe, TTS, publish, serve).
 The language work -- writing lesson.json -- is done by an AI agent
-following docs/lesson-format.md.
+following docs/lesson-format.md. The web app (tools/server.py) reads
+lessons/ live, so a finished lesson shows up on the next page refresh.
 """
 
 from __future__ import annotations
@@ -23,8 +24,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LESSONS = ROOT / "lessons"
-TEMPLATES = ROOT / "tools" / "templates"
-ASSETS = ROOT / "assets"
+DATA_DIR = ROOT / "data"          # progress.db, server.log
+READY_FILE = "ready.json"         # written by `finish`; marks a lesson as published
 
 USE_MLX = sys.platform == "darwin" and platform.machine() == "arm64"
 WHISPER_MODEL = os.environ.get(
@@ -142,10 +143,11 @@ def stage(path: Path) -> str:
         return "1-media"           # media only, needs transcribe
     if not (path / "lesson.json").exists():
         return "2-needs-lesson-json"
-    if not (path / "index.html").exists():
+    ready = path / READY_FILE
+    if not ready.exists():
         return "3-needs-finish"
-    if (path / "lesson.json").stat().st_mtime > (path / "index.html").stat().st_mtime:
-        return "3-needs-finish"    # lesson.json edited after last build
+    if (path / "lesson.json").stat().st_mtime > ready.stat().st_mtime:
+        return "3-needs-finish"    # lesson.json edited after last finish
     return "4-done"
 
 
@@ -429,89 +431,38 @@ def make_tts(out: Path, data: dict) -> None:
         print(f"WARNING: TTS failed ({e}); '标准美音' buttons will be hidden. Re-run finish later.")
 
 
-# ---------- build ----------
+# ---------- lesson data for the web app ----------
 
-def embed(template: str, data) -> str:
-    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
-    return template.replace("/*__DATA__*/null", payload)
-
-
-def collect() -> list[dict]:
-    items = []
-    for d in lesson_dirs():
-        if not (d / "lesson.json").exists():
-            continue
-        items.append({"dir": d, "lesson": read_json(d / "lesson.json"),
-                      "source": read_json(d / "source.json") if (d / "source.json").exists() else {}})
-    return items
+def is_published(path: Path) -> bool:
+    """Finished at least once. Later edits show up live as long as lesson.json stays valid."""
+    return (path / READY_FILE).exists() and (path / "lesson.json").exists()
 
 
-def build_lesson(out: Path, items: list[dict]) -> None:
+def lesson_payload(out: Path) -> dict:
+    """Everything the lesson page needs. Media paths are relative to the site root."""
     data = read_json(out / "lesson.json")
     source = read_json(out / "source.json")
-    ids = [it["dir"].name for it in items]
-    pos = ids.index(out.name)
+    base = f"media/{out.name}"
     tts_dir = out / "tts"
 
     def tts_path(name: str) -> str | None:
-        return f"tts/{name}" if (tts_dir / name).exists() else None
+        return f"{base}/tts/{name}" if (tts_dir / name).exists() else None
 
-    sentences = [{**s, "tts": tts_path(tts_name("s", s["id"], s["en"]))} for s in data["sentences"]]
-    expressions = [{**e, "answer": quiz_answer(e), "tts": tts_path(tts_name("e-", e["id"], quiz_answer(e)))}
-                   for e in data["expressions"]]
-    page = {
+    has_video = source.get("has_video", False)
+    return {
         "id": out.name,
-        **{k: data[k] for k in ("title", "topic")},
+        "title": data["title"],
+        "topic": data["topic"],
         "notes": data.get("notes", ""),
         "source": source,
-        "media": "clip.mp4" if source.get("has_video") else "audio.mp3",
-        "has_video": source.get("has_video", False),
-        "sentences": sentences,
-        "expressions": expressions,
-        "prev": ids[pos - 1] if pos > 0 else None,
-        "next": ids[pos + 1] if pos + 1 < len(ids) else None,
+        "has_video": has_video,
+        "media": f"{base}/{'clip.mp4' if has_video else 'audio.mp3'}",
+        "audio": f"{base}/audio.mp3",
+        "sentences": [{**s, "tts": tts_path(tts_name("s", s["id"], s["en"]))} for s in data["sentences"]],
+        "expressions": [{**e, "lesson": out.name, "answer": quiz_answer(e),
+                         "tts": tts_path(tts_name("e-", e["id"], quiz_answer(e)))}
+                        for e in data["expressions"]],
     }
-    html = embed((TEMPLATES / "lesson.html").read_text(encoding="utf-8"), page)
-    (out / "index.html").write_text(html, encoding="utf-8")
-
-
-def build_site(items: list[dict]) -> None:
-    ASSETS.mkdir(exist_ok=True)
-    for name in ("style.css", "quiz.js"):
-        shutil.copy(TEMPLATES / name, ASSETS / name)
-
-    catalog = [{
-        "id": it["dir"].name,
-        "title": it["lesson"]["title"],
-        "topic": it["lesson"]["topic"],
-        "channel": it["source"].get("channel"),
-        "created": it["source"].get("created"),
-        "duration": it["source"].get("duration"),
-        "n_sentences": len(it["lesson"]["sentences"]),
-        "n_expressions": len(it["lesson"]["expressions"]),
-        "built": (it["dir"] / "index.html").exists(),
-    } for it in items]
-    (ROOT / "index.html").write_text(
-        embed((TEMPLATES / "index.html").read_text(encoding="utf-8"), catalog), encoding="utf-8")
-
-    # expression library: merge by id across lessons, keep every source sentence
-    library: dict[str, dict] = {}
-    for it in items:
-        lid = it["dir"].name
-        sents = {s["id"]: s for s in it["lesson"]["sentences"]}
-        for e in it["lesson"]["expressions"]:
-            entry = library.setdefault(e["id"], {**e, "answer": quiz_answer(e), "tts": None, "occurrences": []})
-            tts = it["dir"] / "tts" / tts_name("e-", e["id"], quiz_answer(e))
-            if entry["tts"] is None and tts.exists():
-                entry["tts"] = tts.relative_to(ROOT).as_posix()
-            for s in sents.values():
-                if any(h.get("expr") == e["id"] for h in s.get("highlights", [])):
-                    entry["occurrences"].append({"lesson": lid, "title": it["lesson"]["title"],
-                                                 "en": s["en"], "zh": s["zh"]})
-    lib = sorted(library.values(), key=lambda e: e["phrase"].lower())
-    (ROOT / "expressions.html").write_text(
-        embed((TEMPLATES / "expressions.html").read_text(encoding="utf-8"), lib), encoding="utf-8")
-    write_json(ROOT / "expressions.json", lib)
 
 
 def cmd_finish(args) -> None:
@@ -524,52 +475,8 @@ def cmd_finish(args) -> None:
         print("Fix lesson.json (see docs/lesson-format.md) and run finish again.")
         sys.exit(1)
     make_tts(out, read_json(out / "lesson.json"))
-    items = collect()
-    for it in items:  # rebuild all so prev/next links stay right
-        if not validate(it["dir"]):
-            build_lesson(it["dir"], items)
-    build_site(items)
-    print(f"[{out.name}] done -> {out / 'index.html'}")
-    print(f"Catalog: {ROOT / 'index.html'}")
-
-
-def cmd_build(args) -> None:
-    items = collect()
-    ok = 0
-    for it in items:
-        errs = validate(it["dir"])
-        if errs:
-            print(f"[{it['dir'].name}] skipped: {len(errs)} validation problem(s)")
-            continue
-        build_lesson(it["dir"], items)
-        ok += 1
-    build_site(items)
-    print(f"built {ok} lesson(s); catalog at {ROOT / 'index.html'}")
-
-
-def cmd_serve(args) -> None:
-    import functools
-    import http.server
-    import socket
-
-    host = "0.0.0.0" if args.lan else "127.0.0.1"
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(ROOT))
-    server = http.server.ThreadingHTTPServer((host, args.port), handler)
-    print(f"Serving {ROOT}")
-    print(f"  this computer: http://127.0.0.1:{args.port}/")
-    if args.lan:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            try:
-                s.connect(("10.255.255.255", 1))
-                ip = s.getsockname()[0]
-            except OSError:
-                ip = "<this-computer-ip>"
-        print(f"  phone/tablet on the same Wi-Fi: http://{ip}:{args.port}/")
-    print("Ctrl+C to stop.")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+    write_json(out / READY_FILE, {"finished_at": dt.datetime.now().astimezone().isoformat(timespec="seconds")})
+    print(f"[{out.name}] done -- published. It now appears in the web app (refresh the page).")
 
 
 def cmd_status(args) -> None:
@@ -585,6 +492,136 @@ def cmd_status(args) -> None:
             except json.JSONDecodeError:
                 title = "(invalid lesson.json)"
         print(f"{d.name}  {stage(d):22s} {title}")
+
+
+def cmd_expressions(args) -> None:
+    """Existing expression ids, so a new lesson reuses them for the same expression."""
+    seen: dict[str, dict] = {}
+    for d in lesson_dirs():
+        if not (d / "lesson.json").exists():
+            continue
+        try:
+            data = read_json(d / "lesson.json")
+        except json.JSONDecodeError:
+            continue
+        for e in data.get("expressions", []):
+            if isinstance(e, dict) and e.get("id"):
+                entry = seen.setdefault(e["id"], {"id": e["id"], "phrase": e.get("phrase", ""),
+                                                  "meaning_zh": e.get("meaning_zh", ""), "lessons": []})
+                entry["lessons"].append(d.name)
+    rows = sorted(seen.values(), key=lambda e: e["id"])
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return
+    for e in rows:
+        print(f"{e['id']:36s} {e['phrase']:32s} {e['meaning_zh']}  [{', '.join(e['lessons'])}]")
+    print(f"({len(rows)} expressions)")
+
+
+# ---------- server / progress / service ----------
+
+def cmd_serve(args) -> None:
+    if args.base_path:
+        os.environ["LESSON_BASE_PATH"] = args.base_path  # read by server at import
+    import uvicorn
+
+    import server
+
+    print(f"Serving on http://{args.host}:{args.port}/  (lessons: {LESSONS}, data: {DATA_DIR})")
+    uvicorn.run(server.app, host=args.host, port=args.port, log_level="warning",
+                proxy_headers=True, forwarded_allow_ips="*")
+
+
+def cmd_progress(args) -> None:
+    import progress
+
+    lessons = {d.name: lesson_payload(d) for d in lesson_dirs() if is_published(d)}
+    report = progress.stats(lessons, days=args.days)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
+    t = report["totals"]
+    print(f"Study days: {t['study_days']}  current streak: {t['streak']}  "
+          f"lessons done: {t['lessons_done']}/{t['lessons_total']}")
+    print(f"Expressions mastered: {t['expressions_mastered']}/{t['expressions_total']}  "
+          f"quiz accuracy: {t['accuracy'] if t['accuracy'] is not None else '-'}%")
+    if report["weak"]:
+        print("\nWeak expressions (most missed first):")
+        for w in report["weak"]:
+            print(f"  {w['phrase']:32s} {w['meaning_zh']}  missed {w['missed']}/{w['attempts']}  ({w['lesson']})")
+    else:
+        print("\nNo missed expressions yet.")
+
+
+SERVICE_LABEL = "com.agent-english-lessons.server"
+
+
+def cmd_service(args) -> None:
+    if sys.platform != "darwin":
+        die("`./lesson service` manages a macOS launchd job. On Linux, create a systemd unit that runs "
+            f"`{ROOT / 'lesson'} serve --port <port>` in {ROOT} (see DEPLOY.md).")
+    plist = Path.home() / "Library" / "LaunchAgents" / f"{SERVICE_LABEL}.plist"
+    domain = f"gui/{os.getuid()}"
+    target = f"{domain}/{SERVICE_LABEL}"
+
+    def launchctl(*a, check=False):
+        return subprocess.run(["launchctl", *a], capture_output=True, text=True, check=check)
+
+    if args.action == "install":
+        if not args.port:
+            die("--port is required for install")
+        DATA_DIR.mkdir(exist_ok=True)
+        uv = shutil.which("uv") or str(Path.home() / ".local" / "bin" / "uv")
+        path_env = ":".join(dict.fromkeys([str(Path(uv).parent), "/opt/homebrew/bin", "/usr/local/bin",
+                                           "/usr/bin", "/bin", "/usr/sbin", "/sbin"]))
+        base_arg = (f"\n    <string>--base-path</string><string>{args.base_path}</string>"
+                    if args.base_path else "")
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        plist.write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>{SERVICE_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{uv}</string><string>run</string><string>--quiet</string>
+    <string>python</string><string>tools/lesson.py</string>
+    <string>serve</string><string>--host</string><string>{args.host}</string>
+    <string>--port</string><string>{args.port}</string>{base_arg}
+  </array>
+  <key>WorkingDirectory</key><string>{ROOT}</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>{path_env}</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>{DATA_DIR / 'server.log'}</string>
+  <key>StandardErrorPath</key><string>{DATA_DIR / 'server.log'}</string>
+</dict>
+</plist>
+""", encoding="utf-8")
+        launchctl("bootout", target)
+        r = launchctl("bootstrap", domain, str(plist))
+        if r.returncode != 0:
+            die(f"launchctl bootstrap failed: {r.stderr.strip()}")
+        print(f"installed {plist}\nserver starts at login and restarts if it crashes: "
+              f"http://{args.host}:{args.port}/\nlog: {DATA_DIR / 'server.log'}")
+    elif args.action == "uninstall":
+        launchctl("bootout", target)
+        plist.unlink(missing_ok=True)
+        print("service removed")
+    elif args.action == "restart":
+        r = launchctl("kickstart", "-k", target)
+        if r.returncode != 0:
+            die(f"restart failed (is the service installed?): {r.stderr.strip()}")
+        print("service restarted")
+    else:  # status
+        r = launchctl("print", target)
+        if not plist.exists() or r.returncode != 0:
+            print("service not installed")
+            return
+        state = re.search(r"^\s*state = (.+)$", r.stdout, re.M)
+        pid = re.search(r"^\s*pid = (\d+)$", r.stdout, re.M)
+        print(f"state: {state.group(1) if state else '?'}  pid: {pid.group(1) if pid else '-'}  plist: {plist}")
 
 
 # ---------- main ----------
@@ -609,20 +646,35 @@ def main() -> None:
     v.add_argument("lesson")
     v.set_defaults(func=cmd_validate)
 
-    f = sub.add_parser("finish", help="validate, generate TTS, build pages")
+    f = sub.add_parser("finish", help="validate, generate TTS, publish to the web app")
     f.add_argument("lesson")
     f.set_defaults(func=cmd_finish)
-
-    b = sub.add_parser("build", help="rebuild all HTML pages (no TTS)")
-    b.set_defaults(func=cmd_build)
 
     s = sub.add_parser("status", help="list lessons and what step each is at")
     s.set_defaults(func=cmd_status)
 
-    sv = sub.add_parser("serve", help="serve the lessons over HTTP (optional; pages also open as plain files)")
-    sv.add_argument("--port", type=int, default=8000)
-    sv.add_argument("--lan", action="store_true", help="also reachable from phones on the same network")
+    ex = sub.add_parser("expressions", help="list existing expression ids (reuse them in new lessons)")
+    ex.add_argument("--json", action="store_true")
+    ex.set_defaults(func=cmd_expressions)
+
+    sv = sub.add_parser("serve", help="run the web app in the foreground")
+    sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument("--port", type=int, default=8765)
+    sv.add_argument("--base-path", default=os.environ.get("LESSON_BASE_PATH", ""),
+                    help="only if a reverse proxy forwards /english/... WITHOUT stripping the prefix")
     sv.set_defaults(func=cmd_serve)
+
+    pr = sub.add_parser("progress", help="learner's study stats and most-missed expressions")
+    pr.add_argument("--json", action="store_true")
+    pr.add_argument("--days", type=int, default=112, help="activity window for the calendar")
+    pr.set_defaults(func=cmd_progress)
+
+    se = sub.add_parser("service", help="macOS: run the web app at login via launchd")
+    se.add_argument("action", choices=["install", "uninstall", "restart", "status"])
+    se.add_argument("--port", type=int)
+    se.add_argument("--host", default="127.0.0.1")
+    se.add_argument("--base-path", default="", help="see `serve --help`")
+    se.set_defaults(func=cmd_service)
 
     args = p.parse_args()
     args.func(args)

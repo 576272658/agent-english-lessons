@@ -147,6 +147,43 @@ mark.hl { background: var(--mark); color: var(--mark-text); border-radius: 4px; 
   .q-btn { font-size: 15px; padding: 10px 4px; }
 }
 
+/* nav, toast */
+.nav { display: flex; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.nav a { padding: 8px 14px; text-decoration: none; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.nav a.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: .2s; z-index: 10; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.muted { color: var(--muted); font-size: 14px; }
+
+/* stats */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin: 8px 0; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.tile-l { color: var(--muted); font-size: 13px; }
+.tile-v { font-size: 30px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.tile-v span { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 4px; }
+:root { --heat-0: #ebede8; --heat-1: #c6e6d2; --heat-2: #8fcca8; --heat-3: #4ea676; --heat-4: #1f7a4d; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --heat-0: #232a26; --heat-1: #1f4a33; --heat-2: #2b7049; --heat-3: #43a06c; --heat-4: #7fd6a8; } }
+:root[data-theme="dark"] { --heat-0: #232a26; --heat-1: #1f4a33; --heat-2: #2b7049; --heat-3: #43a06c; --heat-4: #7fd6a8; }
+.cal { overflow-x: auto; }
+.cal-months, .cal-body { display: flex; gap: 3px; }
+.cal-months span { width: 14px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.cal-months span:first-child, .cal-wd { width: 18px; flex: none; }
+.cal-wd, .cal-col { display: flex; flex-direction: column; gap: 3px; }
+.cal-wd span { height: 14px; font-size: 10px; line-height: 14px; color: var(--muted); }
+.cell { display: inline-block; width: 14px; height: 14px; border-radius: 3px; background: var(--heat-0); cursor: pointer; }
+.cell.pad { background: transparent; cursor: default; }
+.cell.l1 { background: var(--heat-1); } .cell.l2 { background: var(--heat-2); } .cell.l3 { background: var(--heat-3); } .cell.l4 { background: var(--heat-4); }
+.cell.sel { outline: 2px solid var(--text); outline-offset: 1px; }
+.cal-legend { display: flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+.cal-legend .cell { cursor: default; width: 12px; height: 12px; }
+.cal-tip { font-size: 14px; color: var(--muted); margin-top: 6px; min-height: 1.5em; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 15px; }
+.tbl th { text-align: left; font-weight: 500; color: var(--muted); font-size: 13px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.tbl td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tbl .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.plain { list-style: none; padding: 0; margin: 0; }
+.plain li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+
 /* catalog + library */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
 .lesson-card { display: block; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
