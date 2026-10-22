@@ -194,13 +194,10 @@ async def word_lookup(request: Request):
     if not dictionary.installed():
         return JSONResponse({"found": False, "error": "dictionary not installed (run ./lesson dict install)"},
                             status_code=503)
-    entry = dictionary.lookup(raw)
-    if entry is None:
+    payload = lookup_payload(raw)
+    if payload is None:
         return JSONResponse({"found": False, "query": raw}, status_code=404)
-    # book_key: what "add to word book" saves -- the clicked form when it has its own meaning ("excited")
-    book_key = entry["surface"] if entry.get("surface_translation") else entry["key"]
-    return JSONResponse({"found": True, **entry, "book_key": book_key,
-                         "audio": f"api/word-audio/{entry.get('surface') or entry['key']}"})
+    return JSONResponse(payload)
 
 
 async def word_audio(request: Request):
@@ -227,6 +224,44 @@ async def list_words(request: Request):
     return JSONResponse([{**w, "audio": f"api/word-audio/{w['word']}"} for w in progress.words()])
 
 
+def book_entry(raw: str) -> dict | None:
+    """Dictionary entry as saved in the word book."""
+    entry = dictionary.lookup(raw)
+    if entry and entry.get("surface_translation") and raw.lower() == entry["surface"]:
+        # save "excited" (兴奋的) itself rather than its base "excite" (刺激)
+        entry = {**entry, "key": entry["surface"], "word": entry["surface"],
+                 "phonetic": entry.get("surface_phonetic") or "", "translation": entry["surface_translation"]}
+    return entry
+
+
+def lookup_payload(raw: str) -> dict | None:
+    entry = dictionary.lookup(raw)
+    if entry is None:
+        return None
+    # book_key: what "add to word book" saves -- the clicked form when it has its own meaning ("excited")
+    book_key = entry["surface"] if entry.get("surface_translation") else entry["key"]
+    return {"found": True, **entry, "book_key": book_key,
+            "audio": f"api/word-audio/{entry.get('surface') or entry['key']}"}
+
+
+async def lesson_words(request: Request):
+    """Dictionary entries for every word in a lesson -- downloaded with the lesson for offline look-up."""
+    lid = request.path_params["lesson_id"].upper()
+    lessons = published()
+    if lid not in lessons or not dictionary.installed():
+        raise HTTPException(404)
+    p = lessons[lid]
+    texts = [s["en"] for s in p["sentences"]] + [x["en"] for e in p["expressions"] for x in e.get("examples", [])]
+    out = {}
+    for t in texts:
+        for tok in difficulty.TOKEN_RE.findall(t):
+            key = tok.lower().replace("’", "'")
+            if key not in out and (entry := lookup_payload(key)) is not None:
+                entry["definition"] = entry["definition"][:2]
+                out[key] = entry
+    return JSONResponse(out)
+
+
 async def word_book(request: Request):
     raw = request.path_params["word"]
     if request.method == "DELETE":
@@ -234,13 +269,9 @@ async def word_book(request: Request):
             raise HTTPException(400, "bad word")
         progress.remove_word(raw.lower())
         return JSONResponse(progress.snapshot()["words"])
-    entry = dictionary.lookup(raw)
+    entry = book_entry(raw)
     if entry is None:
         raise HTTPException(404, "word not in dictionary")
-    if entry.get("surface_translation") and raw.lower() == entry["surface"]:
-        # save "excited" (兴奋的) itself rather than its base "excite" (刺激)
-        entry = {**entry, "key": entry["surface"], "word": entry["surface"],
-                 "phonetic": entry.get("surface_phonetic") or "", "translation": entry["surface_translation"]}
     try:
         body = await request.json()
     except ValueError:
@@ -256,6 +287,70 @@ async def word_book(request: Request):
 async def stats(request: Request):
     days = min(max(int(request.query_params.get("days", 112)), 7), 366)
     return JSONResponse(progress.stats(published(), days=days))
+
+
+# ---------- offline sync ----------
+
+def apply_op(op: dict) -> None:
+    """One queued client write. Raises ValueError for malformed ops (they are dropped, not retried)."""
+    t = progress.client_time(op.get("at"))
+    kind = op.get("type")
+    lid = op.get("lesson")
+    if lid is not None and not LESSON_ID_RE.match(str(lid)):
+        lid = None
+    if kind == "checkin":
+        if not lid:
+            raise ValueError("lesson required")
+        progress.set_checkin(lid, bool(op.get("done")), t)
+    elif kind == "favorite":
+        if not EXPR_ID_RE.match(str(op.get("expr", ""))):
+            raise ValueError("bad expr")
+        progress.set_favorite(op["expr"], bool(op.get("on")), t)
+    elif kind == "attempt":
+        item, k = str(op.get("expr", "")), op.get("kind", "expr")
+        ok = EXPR_ID_RE.match(item) if k == "expr" else dictionary.WORD_RE.match(item)
+        if k not in ("expr", "word") or not ok or op.get("result") not in ("known", "unknown") \
+                or op.get("mode", "typing") not in ("typing", "flash"):
+            raise ValueError("bad attempt")
+        progress.add_attempt(item, op["result"], op.get("mode", "typing"), lid,
+                             max(0, min(int(op.get("wrong_tries", 0)), 10)), k, t)
+    elif kind == "word_add":
+        entry = book_entry(str(op.get("word", "")))
+        if entry is None:
+            raise ValueError("word not in dictionary")
+        clip = lambda v: str(v)[:400] if v else None
+        progress.add_word(entry, lid, clip(op.get("context_en")), clip(op.get("context_zh")), t)
+    elif kind == "word_remove":
+        w = str(op.get("word", "")).lower()
+        if not dictionary.WORD_RE.match(w):
+            raise ValueError("bad word")
+        progress.remove_word(w)
+    else:
+        raise ValueError(f"unknown op type {kind!r}")
+
+
+async def sync(request: Request):
+    """Apply queued writes from a device (in order, each at most once) and return fresh progress."""
+    try:
+        ops = (await request.json())["ops"]
+        assert isinstance(ops, list)
+    except (ValueError, KeyError, TypeError, AssertionError):
+        raise HTTPException(400, "expected {ops: [...]}")
+    done, rejected = [], []
+    for op in ops[:500]:
+        op_id = str(op.get("id", ""))
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", op_id):
+            rejected.append(op_id)
+            continue
+        if progress.claim_op(op_id):
+            try:
+                apply_op(op)
+            except (ValueError, TypeError) as e:
+                print(f"[server] sync: dropped op {op_id}: {e}", file=sys.stderr)
+                rejected.append(op_id)
+                continue
+        done.append(op_id)
+    return JSONResponse({"applied": done, "rejected": rejected, "progress": progress.snapshot()})
 
 
 async def get_settings(request: Request):
@@ -310,6 +405,8 @@ routes = [
     Route("/api/health", health),
     Route("/api/lessons", list_lessons),
     Route("/api/lessons/{lesson_id}", get_lesson),
+    Route("/api/lessons/{lesson_id}/words", lesson_words),
+    Route("/api/sync", sync, methods=["POST"]),
     Route("/api/expressions", expressions),
     Route("/api/progress", get_progress),
     Route("/api/checkins/{lesson_id}", checkin, methods=["PUT", "DELETE"]),

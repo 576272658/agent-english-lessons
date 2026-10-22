@@ -41,7 +41,13 @@
   async function lookup(word) {
     const key = word.toLowerCase().replace(/’/g, "'");
     if (!cache.has(key)) {
-      cache.set(key, fetch(`api/word/${encodeURIComponent(key)}`).then((r) => r.json()).catch(() => ({ found: false, error: "网络错误" })));
+      cache.set(key, fetch(`api/word/${encodeURIComponent(key)}`)
+        .then((r) => (r.ok || r.status === 404) ? r.json() : Promise.reject(r.status))
+        .catch(async () => {
+          // offline: use the word bundle downloaded with the lessons
+          cache.delete(key);
+          return (await Offline.lookupWord(key)) || { found: false, error: "离线时只能查已下载课程里的单词" };
+        }));
     }
     return cache.get(key);
   }

@@ -116,7 +116,9 @@ tools/progress.py         progress database (SQLite)
 tools/dictionary.py       click-to-look-up dictionary built from ECDICT into data/dict.db
 tools/difficulty.py       known-word coverage, vocabulary level and speech rate for a learner
 tools/scan.py             `./lesson scan`: rank clips of a long video by fit
-web/                      the site: index, lesson, expressions, stats pages + app.js, quiz.js, style.css
+web/                      the site: index, lesson, expressions, stats pages + app.js, quiz.js, word.js, style.css
+                          sw.js + offline.js: offline mode (auto-download newest 5 unchecked lessons,
+                          queued progress writes synced via POST api/sync)
                           manifest.webmanifest + icons/ (PWA; icons/*.png are rendered from icons/*.svg)
 docs/lesson-format.md     lesson.json spec + authoring rules  ← read before writing
 docs/example-lesson.json  a complete valid example

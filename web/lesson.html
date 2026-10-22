@@ -15,6 +15,7 @@
 <meta name="apple-mobile-web-app-title" content="英语精学">
 <title>Lesson</title>
 <link rel="stylesheet" href="style.css">
+<script src="offline.js"></script>
 <script src="app.js"></script>
 <script src="quiz.js"></script>
 <script src="word.js"></script>
@@ -114,6 +115,7 @@ function render() {
   <div class="btn-row no-print">
     <button class="btn ${done ? "on" : ""}" id="doneBtn">${done ? "✓ 已打卡" : "打卡"}</button>
     <button class="btn" onclick="window.print()">打印 / 存为 PDF</button>
+    <button class="btn" id="dlBtn">⬇ 下载到本机</button>
   </div>
   ${L.notes ? `<p class="tip">${esc(L.notes)}</p>` : ""}
 
@@ -182,6 +184,26 @@ function wire() {
     [$("#doneBtn"), $("#doneBtn2")].forEach((b) => { b.classList.toggle("on", done); b.textContent = done ? "✓ 已打卡" : "打卡"; });
   };
   $("#doneBtn").onclick = $("#doneBtn2").onclick = () => setDone(!progress.isDone(L.id));
+
+  // offline download
+  const dlBtn = $("#dlBtn");
+  const drawDl = async () => {
+    const recs = await Offline.records(), rec = recs.find((r) => r.id === L.id);
+    const st = await Offline.status();
+    dlBtn.disabled = st.downloading === L.id;
+    dlBtn.classList.toggle("on", !!rec);
+    dlBtn.textContent = st.downloading === L.id ? "下载中…" : rec ? "✓ 离线可用（点击删除）" : "⬇ 下载到本机";
+  };
+  dlBtn.onclick = async () => {
+    if (await Offline.isDownloaded(L.id)) {
+      await Offline.remove(L.id); App.toast("已从本机删除（之后有空会按自动规则重新下载）");
+    } else {
+      try { await Offline.download(L.id, "manual"); App.toast("已下载，没网也能学这一课"); }
+      catch (e) { App.toast(e.message || "下载失败"); }
+    }
+  };
+  window.addEventListener("offline-change", drawDl);
+  drawDl();
 
   // step 0 pre-study
   $$("[data-pre-say]").forEach((b) => b.onclick = () => App.play(b.dataset.src, b.dataset.preSay, rate));

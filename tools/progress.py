@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
     mode        TEXT NOT NULL,           -- typing | flash
     wrong_tries INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS applied_ops (   -- offline sync: each client write is applied once
+    op_id TEXT PRIMARY KEY,
+    at    TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,              -- e.g. "level"
     value TEXT NOT NULL
@@ -54,6 +58,22 @@ CREATE INDEX IF NOT EXISTS quiz_attempts_day ON quiz_attempts (day);
 
 def now() -> dt.datetime:
     return dt.datetime.now().astimezone()
+
+
+def client_time(value: str | None) -> dt.datetime:
+    """When a write really happened (it may arrive later from an offline device). Converted to
+    server local time; missing, unparsable or implausible values fall back to now."""
+    t = now()
+    if not value:
+        return t
+    try:
+        c = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return t
+    if c.tzinfo is None:
+        return t
+    c = c.astimezone()
+    return c if t - dt.timedelta(days=60) <= c <= t + dt.timedelta(minutes=5) else t
 
 
 @contextmanager
@@ -76,27 +96,27 @@ def db():
 
 # ---------- writes ----------
 
-def set_checkin(lesson_id: str, done: bool) -> None:
+def set_checkin(lesson_id: str, done: bool, at: dt.datetime | None = None) -> None:
     with db() as c:
         if done:
             c.execute("INSERT OR IGNORE INTO checkins (lesson_id, at) VALUES (?, ?)",
-                      (lesson_id, now().isoformat(timespec="seconds")))
+                      (lesson_id, (at or now()).isoformat(timespec="seconds")))
         else:
             c.execute("DELETE FROM checkins WHERE lesson_id = ?", (lesson_id,))
 
 
-def set_favorite(expr_id: str, fav: bool) -> None:
+def set_favorite(expr_id: str, fav: bool, at: dt.datetime | None = None) -> None:
     with db() as c:
         if fav:
             c.execute("INSERT OR IGNORE INTO favorites (expr_id, at) VALUES (?, ?)",
-                      (expr_id, now().isoformat(timespec="seconds")))
+                      (expr_id, (at or now()).isoformat(timespec="seconds")))
         else:
             c.execute("DELETE FROM favorites WHERE expr_id = ?", (expr_id,))
 
 
 def add_attempt(item_id: str, result: str, mode: str, lesson_id: str | None, wrong_tries: int,
-                kind: str = "expr") -> None:
-    t = now()
+                kind: str = "expr", at: dt.datetime | None = None) -> None:
+    t = at or now()
     with db() as c:
         c.execute("INSERT INTO quiz_attempts (at, day, lesson_id, expr_id, kind, result, mode, wrong_tries) "
                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -104,14 +124,23 @@ def add_attempt(item_id: str, result: str, mode: str, lesson_id: str | None, wro
                    wrong_tries))
 
 
-def add_word(entry: dict, lesson_id: str | None, context_en: str | None, context_zh: str | None) -> None:
+def add_word(entry: dict, lesson_id: str | None, context_en: str | None, context_zh: str | None,
+             at: dt.datetime | None = None) -> None:
     """entry: a dictionary lookup result (tools/dictionary.py)."""
     meaning = "；".join(entry["translation"][:2])[:120]
     with db() as c:
         c.execute("INSERT INTO wordbook (word, display, phonetic, meaning, lesson_id, context_en, context_zh, at) "
                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(word) DO NOTHING",
                   (entry["key"], entry["word"], entry["phonetic"], meaning, lesson_id, context_en, context_zh,
-                   now().isoformat(timespec="seconds")))
+                   (at or now()).isoformat(timespec="seconds")))
+
+
+def claim_op(op_id: str) -> bool:
+    """True the first time an offline-sync operation id is seen; False for a re-sent duplicate."""
+    with db() as c:
+        cur = c.execute("INSERT OR IGNORE INTO applied_ops (op_id, at) VALUES (?, ?)",
+                        (op_id, now().isoformat(timespec="seconds")))
+        return cur.rowcount == 1
 
 
 def remove_word(word: str) -> None:

@@ -49,7 +49,7 @@ Logs: `data/server.log`.
 ## 3. Expose it over Tailscale HTTPS
 
 HTTPS is required, not optional: browsers only allow the microphone (the
-shadowing/recording feature) on HTTPS pages.
+shadowing/recording feature) and offline mode (service worker) on HTTPS pages.
 
 Check what is already served: `tailscale serve status`. Then use **one** of:
 

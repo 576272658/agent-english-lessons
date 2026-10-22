@@ -15,6 +15,7 @@
 <meta name="apple-mobile-web-app-title" content="英语精学">
 <title>英语课程</title>
 <link rel="stylesheet" href="style.css">
+<script src="offline.js"></script>
 <script src="app.js"></script>
 </head>
 <body>
@@ -22,6 +23,8 @@
 <script>
 const { esc, progress } = App;
 let LESSONS = [], SETTINGS = null, topic = "", todoOnly = false, fitOnly = false;
+let DOWNLOADED = new Set();
+const mb = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(b >= 10485760 ? 0 : 1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
 const FITS_FOR_ME = ["easy", "good"];
 
 function shell() {
@@ -29,6 +32,7 @@ function shell() {
     ${App.nav("courses")}
     <h1>地道口语 · 六步精学</h1>
     <p class="tip" id="summary"></p>
+    <div class="offline-bar" id="offlineBar"></div>
     <input class="search" id="q" placeholder="搜索标题、主题或博主…" autocomplete="off">
     <div class="chips" id="topics"></div>
     <div class="grid" id="list"></div>`;
@@ -58,8 +62,9 @@ function draw() {
   const lv = SETTINGS?.levels.find((x) => x.id === SETTINGS.level)?.name;
   document.getElementById("summary").innerHTML = `共 ${LESSONS.length} 课，已打卡 ${done} 课${lv ? ` · 难度按你的水平「${esc(lv)}」计算（<a href="stats.html#level">修改</a>）` : ""}`;
   document.getElementById("list").innerHTML = rows.length ? rows.map((l) => `
-    <a class="lesson-card" href="lesson.html?id=${l.id}">
-      <div class="ep">${esc(l.id)} ${progress.isDone(l.id) ? '<span class="badge">✓ 已打卡</span>' : ""}</div>
+    <a class="lesson-card ${App.isOffline() && !DOWNLOADED.has(l.id) ? "unavailable" : ""}" href="lesson.html?id=${l.id}">
+      <div class="ep">${esc(l.id)} ${progress.isDone(l.id) ? '<span class="badge">✓ 已打卡</span>' : ""}
+        ${DOWNLOADED.has(l.id) ? '<span class="badge dl" title="已下载到本机，离线可学">⬇ 离线可用</span>' : ""}</div>
       <div class="t">${esc(l.title)}</div>
       ${l.difficulty ? `<div class="dline">${App.difficultyBadges(l.difficulty)}</div>` : ""}
       <div class="m">${esc(l.topic)}${l.channel ? " · " + esc(l.channel) : ""}</div>
@@ -67,8 +72,22 @@ function draw() {
     </a>`).join("") : `<div class="empty">${LESSONS.length ? "没有匹配的课程" : "还没有课程。把视频链接发给 Agent，它生成后刷新这里就能看到。"}</div>`;
 }
 
-Promise.all([App.api("api/lessons"), App.api("api/settings"), progress.load()])
-  .then(([lessons, settings]) => { LESSONS = lessons; SETTINGS = settings; shell(); draw(); })
+async function drawOffline() {
+  const st = await Offline.status();
+  DOWNLOADED = new Set(st.lessons.map((l) => l.id));
+  const bar = document.getElementById("offlineBar");
+  if (!bar) return;
+  bar.innerHTML = `<div>📥 <b>离线学习</b>：已下载 ${st.lessons.length} 课${st.lessons.length ? `（${mb(st.bytes)}）` : ""}
+      ${st.downloading ? ` · 正在下载 ${esc(st.downloading)}…` : ""}</div>
+    <label class="switch"><input type="checkbox" id="autoDl" ${st.auto ? "checked" : ""}> 自动下载未打卡的最新 ${st.autoCount} 课</label>`;
+  document.getElementById("autoDl").onchange = (e) => Offline.setAuto(e.target.checked);
+}
+window.addEventListener("offline-change", () => drawOffline().then(() => document.getElementById("list") && draw()));
+window.addEventListener("online", () => draw());
+window.addEventListener("offline", () => draw());
+
+Promise.all([App.api("api/lessons"), App.api("api/settings"), progress.load(), Offline.status()])
+  .then(([lessons, settings, , st]) => { LESSONS = lessons; SETTINGS = settings; DOWNLOADED = new Set(st.lessons.map((l) => l.id)); shell(); draw(); drawOffline(); })
   .catch((e) => App.fail(document.getElementById("app"), e));
 </script>
 </body>

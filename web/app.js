@@ -1,7 +1,9 @@
-/* Shared helpers for every page: API calls, progress (stored on the server), nav, audio.
+/* Shared helpers for every page: API calls, progress (server + offline outbox), nav, audio.
  * All URLs are relative so the app works under a sub-path (e.g. https://host/english/). */
 (function () {
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  let servedFromCache = false;  // some data on this page came from the offline cache
 
   async function api(path, opts = {}) {
     const res = await fetch(path, {
@@ -9,49 +11,75 @@
       headers: opts.body ? { "content-type": "application/json" } : undefined,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
-    if (!res.ok) throw new Error(`${opts.method || "GET"} ${path} → ${res.status}`);
+    if (res.headers.get("x-offline")) { servedFromCache = true; updateNet(); }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.offline ? body.error : `${opts.method || "GET"} ${path} → ${res.status}`);
+    }
     return res.json();
   }
 
-  // Progress lives in data/progress.db on the server. Writes are fire-and-forget with a toast on failure.
+  // Progress lives in data/progress.db on the server. Every write is queued (offline.js) and synced,
+  // so it works offline too; local state is updated immediately.
   const progress = {
     checkins: {},
     favorites: new Set(),
     words: new Set(),
     async load() {
-      const p = await api("api/progress");
-      this.checkins = p.checkins; this.favorites = new Set(p.favorites); this.words = new Set(p.words);
+      this.apply(await api("api/progress"));
     },
+    // server snapshot + writes still waiting in the outbox
+    async apply(snapshot) {
+      this.checkins = { ...snapshot.checkins }; this.favorites = new Set(snapshot.favorites); this.words = new Set(snapshot.words);
+      for (const op of await Offline.pendingOps()) this.applyOp(op);
+    },
+    applyOp(op) {
+      if (op.type === "checkin") { if (op.done) this.checkins[op.lesson] = op.at; else delete this.checkins[op.lesson]; }
+      else if (op.type === "favorite") op.on ? this.favorites.add(op.expr) : this.favorites.delete(op.expr);
+      else if (op.type === "word_add") this.words.add(op.word);
+      else if (op.type === "word_remove") this.words.delete(op.word);
+    },
+    write(op) { this.applyOp({ ...op, at: new Date().toISOString() }); return Offline.queue(op); },
     isDone(id) { return id in this.checkins; },
-    async setDone(id, done) {
-      if (done) this.checkins[id] = new Date().toISOString(); else delete this.checkins[id];
-      try { this.checkins = await api(`api/checkins/${id}`, { method: done ? "PUT" : "DELETE" }); } catch (e) { toast("打卡没有保存成功，请检查网络"); }
-    },
+    setDone(id, done) { return this.write({ type: "checkin", lesson: id, done }); },
     isFav(id) { return this.favorites.has(id); },
     async toggleFav(id) {
-      const fav = !this.favorites.has(id);
-      fav ? this.favorites.add(id) : this.favorites.delete(id);
-      try { this.favorites = new Set(await api(`api/favorites/${id}`, { method: fav ? "PUT" : "DELETE" })); } catch (e) { toast("收藏没有保存成功，请检查网络"); }
-      return fav;
+      const on = !this.favorites.has(id);
+      await this.write({ type: "favorite", expr: id, on });
+      return on;
     },
     hasWord(key) { return this.words.has(key); },
-    async addWord(key, body) {
-      try { this.words = new Set(await api(`api/words/${encodeURIComponent(key)}`, { method: "PUT", body })); toast("已加入生词本"); }
-      catch (e) { toast("加入生词本失败，请检查网络"); }
+    async addWord(key, body = {}) {
+      await this.write({ type: "word_add", word: key, lesson: body.lesson || null, context_en: body.context_en || null, context_zh: body.context_zh || null });
+      toast(navigator.onLine ? "已加入生词本" : "已加入生词本（联网后同步）");
     },
-    async removeWord(key) {
-      try { this.words = new Set(await api(`api/words/${encodeURIComponent(key)}`, { method: "DELETE" })); }
-      catch (e) { toast("移除失败，请检查网络"); }
-    },
-    recordAttempt(a) {
-      api("api/attempts", { method: "POST", body: a }).catch(() => toast("测验记录没有保存成功"));
-    },
+    removeWord(key) { return this.write({ type: "word_remove", word: key }); },
+    recordAttempt(a) { this.write({ type: "attempt", ...a }); },
   };
+  window.addEventListener("progress-synced", (e) => progress.apply(e.detail));
+
+  // network / sync indicator in the nav bar
+  async function updateNet() {
+    const el = document.getElementById("net");
+    if (!el || !window.Offline) return;
+    const st = await Offline.status();
+    const offline = !navigator.onLine || servedFromCache;
+    const parts = [];
+    if (offline) parts.push("离线模式");
+    if (st.pending) parts.push(`${st.pending} 条记录待同步`);
+    if (st.downloading) parts.push(`正在下载 ${st.downloading}…`);
+    el.textContent = parts.join(" · ");
+    el.className = "net" + (offline ? " off" : "") + (parts.length ? "" : " empty");
+  }
+  window.addEventListener("offline-change", updateNet);
+  window.addEventListener("online", () => { servedFromCache = false; updateNet(); });
+  window.addEventListener("offline", updateNet);
 
   function nav(active) {
     const items = [["./", "courses", "课程"], ["expressions.html", "expressions", "表达库"], ["stats.html", "stats", "学习统计"]];
+    setTimeout(updateNet);
     return `<nav class="nav">${items.map(([href, key, label]) =>
-      `<a href="${href}" class="${key === active ? "on" : ""}">${label}</a>`).join("")}</nav>`;
+      `<a href="${href}" class="${key === active ? "on" : ""}">${label}</a>`).join("")}<span id="net" class="net empty"></span></nav>`;
   }
 
   let audio = null;
@@ -101,5 +129,14 @@
       + `<span class="dchip">词汇·${esc(d.vocab_level_name)}</span>${sp}`;
   }
 
-  window.App = { esc, api, progress, nav, play, speak, toast, fail, pref, wordQuizItem, difficultyBadges };
+  // offline = no network at all, or the server is unreachable (e.g. Tailscale down) so data came from cache
+  const isOffline = () => !navigator.onLine || servedFromCache;
+
+  window.App = { esc, api, progress, nav, play, speak, toast, fail, pref, wordQuizItem, difficultyBadges, isOffline };
+
+  // offline support: service worker + background download of the newest lessons
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+  window.addEventListener("load", () => { Offline.flush(); setTimeout(() => Offline.autoSync(), 1500); });
 })();

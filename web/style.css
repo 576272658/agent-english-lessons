@@ -123,6 +123,19 @@ mark.hl { background: var(--mark); color: var(--mark-text); border-radius: 4px; 
 .wpop-def summary { cursor: pointer; }
 .wpop-add { width: 100%; justify-content: center; padding: 8px 12px; }
 
+/* offline */
+.net { margin-left: auto; align-self: center; font-size: 12px; color: var(--muted); white-space: nowrap; padding: 0 4px; }
+.net.off { color: #9a6200; font-weight: 600; }
+.net.empty { display: none; }
+.offline-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; justify-content: space-between; font-size: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; }
+.switch { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
+.switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+.badge.dl { background: #eaf2fc; color: #2563a8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge.dl { background: #1e2a44; color: #9dbbff; } }
+:root[data-theme="dark"] .badge.dl { background: #1e2a44; color: #9dbbff; }
+.lesson-card.unavailable { opacity: .45; }
+.lesson-card.unavailable .t::after { content: "（未下载，联网后可学）"; font-size: 13px; font-weight: 400; color: var(--muted); }
+
 /* difficulty */
 .dline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 2px 0 6px; }
 .fit { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; border: 1px solid; }
